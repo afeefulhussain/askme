@@ -1,8 +1,18 @@
 import React from "react";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Star, GitFork, Github, ExternalLink, ShieldCheck, CheckCircle2 } from "lucide-react";
-import { PROJECTS } from "@/data/axonData";
+import {
+  ArrowLeft,
+  Star,
+  GitFork,
+  Github,
+  ExternalLink,
+  CheckCircle2,
+} from "lucide-react";
+import { readDb } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
 
 interface PageProps {
   params: {
@@ -10,14 +20,22 @@ interface PageProps {
   };
 }
 
-export async function generateStaticParams() {
-  return PROJECTS.map((proj) => ({
-    slug: proj.slug,
-  }));
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
+  const db = readDb();
+  const project = db.projects.find((p) => p.slug === params.slug);
+  if (!project) return { title: "Project Not Found" };
+  return {
+    title: project.title,
+    description: project.summary,
+    alternates: { canonical: `https://axon.org.pk/projects/${project.slug}` },
+  };
 }
 
 export default function ProjectDetailPage({ params }: PageProps) {
-  const project = PROJECTS.find((p) => p.slug === params.slug);
+  const db = readDb();
+  const project = db.projects.find((p) => p.slug === params.slug);
 
   if (!project) {
     notFound();
@@ -118,7 +136,6 @@ export default function ProjectDetailPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Author Bio Card */}
         <div>
           <div className="p-6 bg-void-card border border-void-border rounded-xl font-mono text-xs">
             <div className="text-[10px] text-slate-400 uppercase mb-3">
@@ -128,6 +145,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
               <img
                 src={project.author.avatar}
                 alt={project.author.name}
+                width={48}
+                height={48}
                 className="w-12 h-12 rounded-full object-cover border border-void-border"
               />
               <div>
@@ -141,7 +160,8 @@ export default function ProjectDetailPage({ params }: PageProps) {
             </div>
 
             <p className="text-[11px] text-slate-400 font-sans mb-4">
-              Member engineer at AXON {project.author.wing}. Author of verified open-source components.
+              Member engineer at AXON {project.author.wing}. Author of verified
+              open-source components.
             </p>
 
             <Link

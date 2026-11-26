@@ -1,8 +1,12 @@
 import React from "react";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Clock, Calendar, User, ShieldCheck } from "lucide-react";
-import { BLOGS } from "@/data/axonData";
+import { ArrowLeft } from "lucide-react";
+import { readDb } from "@/lib/db";
+import MarkdownArticle from "@/components/MarkdownArticle";
+
+export const dynamic = "force-dynamic";
 
 interface PageProps {
   params: {
@@ -10,14 +14,22 @@ interface PageProps {
   };
 }
 
-export async function generateStaticParams() {
-  return BLOGS.map((b) => ({
-    slug: b.slug,
-  }));
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
+  const db = readDb();
+  const post = db.blogs.find((b) => b.slug === params.slug);
+  if (!post) return { title: "Article Not Found" };
+  return {
+    title: post.title,
+    description: post.summary,
+    alternates: { canonical: `https://axon.org.pk/blogs/${post.slug}` },
+  };
 }
 
 export default function BlogDetailPage({ params }: PageProps) {
-  const post = BLOGS.find((b) => b.slug === params.slug);
+  const db = readDb();
+  const post = db.blogs.find((b) => b.slug === params.slug);
 
   if (!post) {
     notFound();
@@ -33,10 +45,11 @@ export default function BlogDetailPage({ params }: PageProps) {
         <span>Return to Publications Index</span>
       </Link>
 
-      {/* Post Header */}
       <div className="border-b border-void-border pb-8 mb-10">
         <div className="flex flex-wrap items-center gap-3 font-mono text-xs text-slate-400 mb-4">
-          <span className="text-cyan-axon font-semibold">ENGINEERING MONOGRAPH</span>
+          <span className="text-cyan-axon font-semibold">
+            ENGINEERING MONOGRAPH
+          </span>
           <span className="text-slate-600">/</span>
           <span>{post.publishedAt}</span>
           <span className="text-slate-600">•</span>
@@ -58,21 +71,17 @@ export default function BlogDetailPage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Article Body */}
-      <div className="prose prose-invert max-w-none text-slate-300 font-sans leading-relaxed text-base space-y-6">
-        <p className="text-lg text-slate-200 font-serif italic border-l-2 border-cyan-axon pl-4 py-1">
-          {post.summary}
-        </p>
+      <p className="text-lg text-slate-200 font-serif italic border-l-2 border-cyan-axon pl-4 py-1 mb-8">
+        {post.summary}
+      </p>
 
-        <div className="whitespace-pre-wrap font-sans leading-relaxed text-slate-300">
-          {post.content}
-        </div>
-      </div>
+      <MarkdownArticle content={post.content} />
 
-      {/* Author attribution footer */}
       <div className="mt-16 pt-8 border-t border-void-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 font-mono text-xs bg-void-card p-6 rounded-xl">
         <div>
-          <div className="text-[10px] text-slate-400 uppercase">PUBLISHED UNDER AXON CHARTER</div>
+          <div className="text-[10px] text-slate-400 uppercase">
+            PUBLISHED UNDER AXON CHARTER
+          </div>
           <div className="font-serif text-base font-bold text-white mt-0.5">
             {post.author.name}
           </div>

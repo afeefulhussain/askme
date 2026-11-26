@@ -1,8 +1,10 @@
 import React from "react";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Calendar, Clock, MapPin, ArrowLeft, ArrowUpRight, CheckCircle2, ShieldCheck } from "lucide-react";
-import { EVENTS, AxonEvent } from "@/data/axonData";
+import { Calendar, Clock, MapPin, ArrowLeft } from "lucide-react";
+import { EVENTS } from "@/data/axonData";
+import EventRsvpPanel from "@/components/EventRsvpPanel";
 
 interface PageProps {
   params: {
@@ -16,6 +18,18 @@ export async function generateStaticParams() {
   }));
 }
 
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
+  const event = EVENTS.find((e) => e.slug === params.slug);
+  if (!event) return { title: "Event Not Found" };
+  return {
+    title: event.title,
+    description: event.description,
+    alternates: { canonical: `https://axon.org.pk/events/${event.slug}` },
+  };
+}
+
 export default function EventDetailPage({ params }: PageProps) {
   const event = EVENTS.find((e) => e.slug === params.slug);
 
@@ -23,7 +37,6 @@ export default function EventDetailPage({ params }: PageProps) {
     notFound();
   }
 
-  // Schema.org Event JSON-LD as defined in Blueprint Section 4
   const eventJsonLd = {
     "@context": "https://schema.org",
     "@type": "Event",
@@ -81,7 +94,9 @@ export default function EventDetailPage({ params }: PageProps) {
           </span>
           <span className="text-slate-400">{event.category}</span>
           <span className="text-slate-600">/</span>
-          <span className="text-cyan-axon font-semibold">UET LAHORE CHAPTER</span>
+          <span className="text-cyan-axon font-semibold">
+            UET LAHORE CHAPTER
+          </span>
         </div>
 
         <h1 className="font-serif text-3xl sm:text-5xl font-normal text-white leading-tight">
@@ -105,7 +120,6 @@ export default function EventDetailPage({ params }: PageProps) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-        {/* Main Content */}
         <div className="lg:col-span-2 space-y-8 font-sans">
           <div>
             <h2 className="font-serif text-2xl font-bold text-white mb-3">
@@ -136,9 +150,7 @@ export default function EventDetailPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Sidebar */}
         <div className="space-y-6">
-          {/* Speaker Card */}
           <div className="p-6 rounded-xl bg-void-card border border-void-border font-mono text-xs">
             <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-2">
               SESSION INSTRUCTOR
@@ -150,29 +162,22 @@ export default function EventDetailPage({ params }: PageProps) {
             <div className="text-slate-400 mt-2 text-[11px]">
               {event.speaker.organization}
             </div>
-          </div>
-
-          {/* Registration / RSVP Action Card */}
-          <div className="p-6 rounded-xl bg-void-subtle border border-cyan-axon/40 font-mono text-xs">
-            <div className="text-white font-serif font-bold text-lg mb-2">
-              Registration & Access
-            </div>
-            <p className="text-slate-300 text-[11px] mb-4">
-              AXON members receive automatic reservation. Non-member students must verify university enrollment.
-            </p>
-            {event.status === "Completed" ? (
-              <div className="p-3 text-center rounded bg-void-400 border border-void-border text-slate-400">
-                Session Completed & Archived
-              </div>
-            ) : (
+            {event.speaker.username && (
               <Link
-                href="/join?track=event&id="
-                className="w-full py-3 bg-cyan-axon text-void-500 font-bold uppercase rounded hover:bg-cyan-300 text-center block transition-all shadow"
+                href={`/u/${event.speaker.username}`}
+                className="inline-block mt-3 text-[11px] text-cyan-axon hover:underline"
               >
-                Reserve Seat (Free)
+                View Instructor Portfolio →
               </Link>
             )}
           </div>
+
+          <EventRsvpPanel
+            eventSlug={event.slug}
+            eventTitle={event.title}
+            status={event.status}
+            capacity={event.capacity}
+          />
         </div>
       </div>
     </div>

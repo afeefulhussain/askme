@@ -1,7 +1,27 @@
 import type { Metadata } from "next";
+import { Inter, JetBrains_Mono, Lora } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const lora = Lora({
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  variable: "--font-serif",
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://axon.org.pk"),
@@ -20,6 +40,9 @@ export const metadata: Metadata = {
     "AI/CS community Lahore",
     "university tech organizations Pakistan",
   ],
+  alternates: {
+    canonical: "https://axon.org.pk/",
+  },
   authors: [{ name: "AXON Executive Council" }],
   openGraph: {
     type: "website",
@@ -31,7 +54,7 @@ export const metadata: Metadata = {
       "Empowering the next generation of tech leaders through workshops, events, and collaborative innovation wings.",
     images: [
       {
-        url: "https://axon.org.pk/assets/og-cover.png",
+        url: "/assets/og-cover.svg",
         width: 1200,
         height: 630,
         alt: "AXON Organization Official",
@@ -43,7 +66,7 @@ export const metadata: Metadata = {
     title: "AXON | Independent Tech & Leadership Organization",
     description:
       "Empowering the next generation of tech leaders through workshops, events, and collaborative innovation wings.",
-    images: ["https://axon.org.pk/assets/og-cover.png"],
+    images: ["/assets/og-cover.svg"],
   },
   robots: {
     index: true,
@@ -56,7 +79,7 @@ const jsonLdOrg = {
   "@type": "Organization",
   name: "AXON",
   url: "https://axon.org.pk",
-  logo: "https://axon.org.pk/assets/logo.png",
+  logo: "https://axon.org.pk/assets/logo.svg",
   sameAs: [
     "https://linkedin.com/company/axon-org",
     "https://instagram.com/axon.org",
@@ -79,7 +102,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html
+      lang="en"
+      className={`${inter.variable} ${lora.variable} ${jetbrainsMono.variable} dark`}
+    >
       <head>
         <script
           type="application/ld+json"

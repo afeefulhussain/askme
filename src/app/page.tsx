@@ -4,38 +4,34 @@ import {
   ArrowRight,
   ArrowUpRight,
   ShieldCheck,
-  Cpu,
-  Layers,
-  Terminal,
   Calendar,
-  ExternalLink,
   Github,
   Star,
   GitFork,
   CheckCircle2,
-  Users,
-  Building2,
-  FileText,
 } from "lucide-react";
-import {
-  AXON_ORG_METADATA,
-  WINGS,
-  EVENTS,
-  PROJECTS,
-  BLOGS,
-} from "@/data/axonData";
+import { AXON_ORG_METADATA, WINGS, EVENTS } from "@/data/axonData";
+import { readDb } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
 
 export default function HomePage() {
-  const upcomingEvents = EVENTS.filter((e) => e.status !== "Completed").slice(0, 2);
-  const pastHighlights = EVENTS.filter((e) => e.status === "Completed").slice(0, 1);
-  const featuredProjects = PROJECTS.slice(0, 3);
-  const featuredPosts = BLOGS.slice(0, 2);
+  const db = readDb();
+  const upcomingEvents = EVENTS.filter((e) => e.status !== "Completed").slice(
+    0,
+    2
+  );
+  const featuredProjects = db.projects
+    .filter((p) => p.status === "Verified & Active")
+    .slice(0, 3);
+  const featuredPosts = db.blogs
+    .filter((b) => b.status === "Published")
+    .slice(0, 2);
 
   return (
     <div className="flex flex-col w-full">
       {/* 1. HERO SECTION: Editorial, Authoritative, Minimalist */}
       <section className="relative border-b border-void-border pt-16 pb-20 md:pt-24 md:pb-28 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
-        {/* Subtle top metadata stamp */}
         <div className="flex flex-wrap items-center gap-3 mb-6 font-mono text-xs">
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-void-card border border-void-border text-slate-300">
             <span className="w-1.5 h-1.5 rounded-full bg-circuit-green"></span>
@@ -47,19 +43,26 @@ export default function HomePage() {
           <span className="text-cyan-axon">11 DIRECTORATE WINGS</span>
         </div>
 
-        {/* Primary Editorial Heading */}
         <div className="max-w-4xl">
           <h1 className="font-serif text-3xl sm:text-5xl lg:text-6xl font-normal tracking-tight text-white leading-[1.15]">
             An independent umbrella network advancing{" "}
-            <span className="italic font-normal text-cyan-axon">high-calibre engineering</span>,
-            applied research, and student leadership.
+            <span className="italic font-normal text-cyan-axon">
+              high-calibre engineering
+            </span>
+            , applied research, and student leadership.
           </h1>
 
           <p className="mt-6 text-base sm:text-lg text-slate-300 leading-relaxed font-sans max-w-3xl">
-            Originating at the <strong className="text-white font-semibold">Innovation & Manufacturing Auxiliary Center (IMAC), UET Lahore</strong>, AXON serves as a structured incubator and multi-university umbrella network. We operate 11 specialized directorates spanning distributed systems, hardware fabrication, applied AI, offensive cyber, and peer-reviewed technical research.
+            Originating at the{" "}
+            <strong className="text-white font-semibold">
+              Innovation & Manufacturing Auxiliary Center (IMAC), UET Lahore
+            </strong>
+            , AXON serves as a structured incubator and multi-university
+            umbrella network. We operate 11 specialized directorates spanning
+            distributed systems, hardware fabrication, applied AI, offensive
+            cyber, and peer-reviewed technical research.
           </p>
 
-          {/* Action CTAs */}
           <div className="mt-8 flex flex-wrap items-center gap-4 font-mono text-xs">
             <Link
               href="/join"
@@ -86,7 +89,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Real-Time Impact Metric Strip (Blueprint Section 3) */}
+        {/* Real-Time Impact Metric Strip */}
         <div className="mt-16 pt-8 border-t border-void-border/80 grid grid-cols-2 md:grid-cols-4 gap-6 font-mono">
           <div className="border-l-2 border-cyan-axon pl-4">
             <div className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
@@ -99,7 +102,7 @@ export default function HomePage() {
 
           <div className="border-l-2 border-void-border pl-4">
             <div className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-              {AXON_ORG_METADATA.metrics.directorates}
+              {WINGS.length}
             </div>
             <div className="text-[11px] text-slate-400 uppercase mt-0.5">
               Operational Wings
@@ -139,7 +142,8 @@ export default function HomePage() {
               </h2>
             </div>
             <p className="mt-4 md:mt-0 text-sm font-sans text-slate-400 max-w-md">
-              Each wing operates with dedicated research labs, directorate heads, student engineering teams, and institutional mandates.
+              Each wing operates with dedicated research labs, directorate
+              heads, student engineering teams, and institutional mandates.
             </p>
           </div>
 
@@ -151,7 +155,9 @@ export default function HomePage() {
               >
                 <div>
                   <div className="flex items-center justify-between text-xs font-mono text-slate-400 mb-3">
-                    <span className="text-cyan-axon font-semibold">{wing.code}</span>
+                    <span className="text-cyan-axon font-semibold">
+                      {wing.code}
+                    </span>
                     <span className="flex items-center gap-1.5 text-[11px]">
                       <span className="w-1.5 h-1.5 rounded-full bg-circuit-green"></span>
                       {wing.status}
@@ -159,7 +165,7 @@ export default function HomePage() {
                   </div>
 
                   <h3 className="font-serif text-xl font-bold text-white group-hover:text-cyan-axon transition-colors">
-                    {wing.name}
+                    <Link href={`/wings/${wing.slug}`}>{wing.name}</Link>
                   </h3>
 
                   <p className="mt-2 text-xs text-slate-400 font-sans leading-relaxed">
@@ -179,9 +185,14 @@ export default function HomePage() {
                 </div>
 
                 <div className="mt-6 pt-4 border-t border-void-border/60 flex items-center justify-between text-xs font-mono">
-                  <span className="text-slate-400">Dir: {wing.lead}</span>
                   <Link
-                    href={`/wings#${wing.id}`}
+                    href={`/u/${wing.leadUsername}`}
+                    className="text-slate-400 hover:text-white"
+                  >
+                    Dir: {wing.lead}
+                  </Link>
+                  <Link
+                    href={`/wings/${wing.slug}`}
                     className="text-cyan-axon hover:underline flex items-center gap-1"
                   >
                     <span>Charter</span>
@@ -239,18 +250,21 @@ export default function HomePage() {
                 </div>
 
                 <h3 className="font-serif text-2xl font-bold text-white leading-snug">
-                  {evt.title}
+                  <Link href={`/events/${evt.slug}`} className="hover:text-cyan-axon">
+                    {evt.title}
+                  </Link>
                 </h3>
 
                 <p className="mt-3 text-sm text-slate-400 font-sans leading-relaxed">
                   {evt.description}
                 </p>
 
-                {/* Speaker pill */}
                 <div className="mt-5 p-3 rounded bg-void-subtle border border-void-border/70 flex items-center justify-between font-mono text-xs">
                   <div>
                     <div className="text-slate-400 text-[10px]">INSTRUCTOR</div>
-                    <div className="text-white font-medium">{evt.speaker.name}</div>
+                    <div className="text-white font-medium">
+                      {evt.speaker.name}
+                    </div>
                   </div>
                   <div className="text-right text-[11px] text-slate-400">
                     {evt.speaker.title}
@@ -261,7 +275,9 @@ export default function HomePage() {
               <div className="mt-6 pt-5 border-t border-void-border/70 flex flex-col sm:flex-row sm:items-center justify-between font-mono text-xs gap-3">
                 <div className="flex items-center gap-2 text-slate-300">
                   <Calendar className="w-4 h-4 text-cyan-axon" />
-                  <span>{evt.date} // {evt.time}</span>
+                  <span>
+                    {evt.date} // {evt.time}
+                  </span>
                 </div>
                 <Link
                   href={`/events/${evt.slug}`}
@@ -321,7 +337,12 @@ export default function HomePage() {
                   </div>
 
                   <h3 className="font-serif text-xl font-bold text-white mb-2">
-                    {project.title}
+                    <Link
+                      href={`/projects/${project.slug}`}
+                      className="hover:text-cyan-axon"
+                    >
+                      {project.title}
+                    </Link>
                   </h3>
 
                   <p className="text-xs text-slate-400 font-sans leading-relaxed mb-4">
@@ -348,6 +369,8 @@ export default function HomePage() {
                     <img
                       src={project.author.avatar}
                       alt={project.author.name}
+                      width={20}
+                      height={20}
                       className="w-5 h-5 rounded-full object-cover"
                     />
                     <span>{project.author.name}</span>
@@ -369,7 +392,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 5. VERIFICATION UTILITY CALLOUT (Blueprint Section 8.2) */}
+      {/* 5. VERIFICATION UTILITY CALLOUT */}
       <section className="py-16 border-b border-void-border max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
         <div className="rounded-xl border border-void-border bg-gradient-to-r from-void-card via-void-subtle to-void-card p-8 sm:p-12 flex flex-col md:flex-row items-center justify-between gap-8">
           <div className="max-w-2xl">
@@ -377,11 +400,14 @@ export default function HomePage() {
               <ShieldCheck className="w-4 h-4" />
               <span>DISCREET VERIFICATION ENGINE</span>
             </div>
-            <h3 className="font-serif text-2xl sm:text-3xl font-bold text-white">
+            <h2 className="font-serif text-2xl sm:text-3xl font-bold text-white">
               Recruiter & Institutional Credential Verification
-            </h3>
+            </h2>
             <p className="mt-2 text-sm text-slate-400 font-sans leading-relaxed">
-              Every certificate, workshop distinction, and member identification issued under AXON&apos;s IMAC UET charter is cryptographically anchored. Instantly authenticate candidate claims with a single code lookup.
+              Every certificate, workshop distinction, and member identification
+              issued under AXON&apos;s IMAC UET charter is cryptographically
+              anchored. Instantly authenticate candidate claims with a single
+              code lookup.
             </p>
           </div>
 

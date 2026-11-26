@@ -1,70 +1,102 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { ShieldCheck, CheckCircle2, AlertCircle, Search, Hash, Calendar, Building, Award, User, RefreshCw } from "lucide-react";
-import { CERTIFICATES_DATABASE, VerifiedCertificate } from "@/data/axonData";
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  ShieldCheck,
+  CheckCircle2,
+  AlertCircle,
+  Search,
+  Hash,
+  Calendar,
+  Building,
+  Award,
+  RefreshCw,
+  ShieldAlert,
+} from "lucide-react";
+import type { VerifiedCertificate } from "@/lib/types";
 
 interface VerificationEngineProps {
   initialCode?: string;
 }
 
-export default function VerificationEngine({ initialCode = "" }: VerificationEngineProps) {
+export default function VerificationEngine({
+  initialCode = "",
+}: VerificationEngineProps) {
   const [query, setQuery] = useState(initialCode);
-  const [result, setResult] = useState<VerifiedCertificate | null | "not_found">(null);
+  const [result, setResult] = useState<VerifiedCertificate | null | "not_found">(
+    null
+  );
   const [hasSearched, setHasSearched] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const handleSearch = useCallback(
+    async (codeToSearch?: string) => {
+      const code = (codeToSearch ?? query).trim();
+      if (!code) return;
+
+      setLoading(true);
+      setHasSearched(true);
+
+      try {
+        const res = await fetch(
+          `/api/verify?code=${encodeURIComponent(code)}`,
+          { cache: "no-store" }
+        );
+        if (res.ok) {
+          const data = (await res.json()) as {
+            found: boolean;
+            record: VerifiedCertificate | null;
+          };
+          setResult(data.found && data.record ? data.record : "not_found");
+        } else {
+          setResult("not_found");
+        }
+      } catch {
+        setResult("not_found");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [query]
+  );
+
   useEffect(() => {
     if (initialCode) {
+      setQuery(initialCode);
       handleSearch(initialCode);
     }
-  }, [initialCode]);
-
-  const handleSearch = (codeToSearch?: string) => {
-    const code = (codeToSearch || query).trim().toUpperCase();
-    if (!code) return;
-
-    setLoading(true);
-    setHasSearched(true);
-
-    setTimeout(() => {
-      const match = CERTIFICATES_DATABASE.find(
-        (c) =>
-          c.certCode.toUpperCase() === code ||
-          (c.memberId && c.memberId.toUpperCase() === code) ||
-          c.recipientName.toUpperCase().includes(code)
-      );
-
-      setResult(match || "not_found");
-      setLoading(false);
-    }, 350);
-  };
+  }, [initialCode, handleSearch]);
 
   return (
     <div className="w-full">
       {/* Search Input Box */}
       <div className="bg-void-card border border-void-border p-6 rounded-lg shadow-xl">
-        <label className="block text-xs font-mono uppercase tracking-wider text-slate-300 mb-2">
+        <label
+          htmlFor="verify-code-input"
+          className="block text-xs font-mono uppercase tracking-wider text-slate-300 mb-2"
+        >
           Enter Certificate Verification Code or Member ID
         </label>
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <input
+              id="verify-code-input"
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               placeholder="e.g. AXN-2026-018 or AXN-CERT-9042"
-              className="w-full bg-void-400 border border-void-border rounded px-4 py-3 font-mono text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-axon transition-colors"
+              className="w-full bg-void-400 border border-void-border rounded px-4 py-3 pr-20 font-mono text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-axon transition-colors"
             />
             <span className="absolute right-3 top-3.5 text-xs font-mono text-slate-500">
               SHA-160
             </span>
           </div>
           <button
+            type="button"
             onClick={() => handleSearch()}
             disabled={loading}
-            className="px-6 py-3 bg-cyan-axon hover:bg-cyan-300 text-void-500 font-mono text-xs uppercase font-bold tracking-wider rounded transition-all flex items-center justify-center gap-2"
+            className="px-6 py-3 bg-cyan-axon hover:bg-cyan-300 text-void-500 font-mono text-xs uppercase font-bold tracking-wider rounded transition-all flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {loading ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
@@ -78,18 +110,21 @@ export default function VerificationEngine({ initialCode = "" }: VerificationEng
         {/* Quick sample chips */}
         <div className="mt-4 flex flex-wrap items-center gap-2 text-xs font-mono">
           <span className="text-slate-500 text-[11px]">Audit Samples:</span>
-          {["AXN-2026-018", "AXN-CERT-9042", "AXN-CERT-8819"].map((sample) => (
-            <button
-              key={sample}
-              onClick={() => {
-                setQuery(sample);
-                handleSearch(sample);
-              }}
-              className="px-2 py-0.5 bg-void-subtle border border-void-border/80 hover:border-cyan-axon/60 text-slate-300 rounded text-[11px] transition-colors"
-            >
-              {sample}
-            </button>
-          ))}
+          {["AXN-2026-018", "AXN-CERT-9042", "AXN-CERT-8819", "AXN-2026-004"].map(
+            (sample) => (
+              <button
+                key={sample}
+                type="button"
+                onClick={() => {
+                  setQuery(sample);
+                  handleSearch(sample);
+                }}
+                className="px-2 py-0.5 bg-void-subtle border border-void-border/80 hover:border-cyan-axon/60 text-slate-300 rounded text-[11px] transition-colors"
+              >
+                {sample}
+              </button>
+            )
+          )}
         </div>
       </div>
 
@@ -104,22 +139,52 @@ export default function VerificationEngine({ initialCode = "" }: VerificationEng
               </div>
             </div>
           ) : result && result !== "not_found" ? (
-            <div className="bg-void-card border border-circuit-green/40 rounded-lg p-6 sm:p-8 relative overflow-hidden shadow-2xl">
-              {/* Background watermark badge */}
-              <div className="absolute -right-8 -bottom-8 text-circuit-green/[0.04] pointer-events-none">
+            <div
+              className={`bg-void-card border rounded-lg p-6 sm:p-8 relative overflow-hidden shadow-2xl ${
+                result.status === "Active"
+                  ? "border-circuit-green/40"
+                  : "border-red-500/50"
+              }`}
+            >
+              {/* Background watermark */}
+              <div
+                className={`absolute -right-8 -bottom-8 pointer-events-none ${
+                  result.status === "Active"
+                    ? "text-circuit-green/[0.04]"
+                    : "text-red-500/[0.05]"
+                }`}
+              >
                 <ShieldCheck className="w-64 h-64" />
               </div>
 
               {/* Status Header */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-void-border">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-circuit-green/10 border border-circuit-green flex items-center justify-center text-circuit-green">
-                    <CheckCircle2 className="w-6 h-6" />
+                  <div
+                    className={`w-10 h-10 rounded-full border flex items-center justify-center ${
+                      result.status === "Active"
+                        ? "bg-circuit-green/10 border-circuit-green text-circuit-green"
+                        : "bg-red-500/10 border-red-500 text-red-400"
+                    }`}
+                  >
+                    {result.status === "Active" ? (
+                      <CheckCircle2 className="w-6 h-6" />
+                    ) : (
+                      <ShieldAlert className="w-6 h-6" />
+                    )}
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs uppercase px-2 py-0.5 rounded bg-circuit-green/20 text-circuit-green border border-circuit-green/30 font-bold">
-                        AUTHENTIC // STATUS: {result.status.toUpperCase()}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`font-mono text-xs uppercase px-2 py-0.5 rounded border font-bold ${
+                          result.status === "Active"
+                            ? "bg-circuit-green/20 text-circuit-green border-circuit-green/30"
+                            : "bg-red-500/20 text-red-400 border-red-500/40"
+                        }`}
+                      >
+                        {result.status === "Active"
+                          ? "AUTHENTIC // STATUS: ACTIVE"
+                          : "INVALIDATED // STATUS: REVOKED"}
                       </span>
                       <span className="text-xs font-mono text-slate-400">
                         {result.type}
@@ -131,7 +196,7 @@ export default function VerificationEngine({ initialCode = "" }: VerificationEng
                   </div>
                 </div>
 
-                <div className="text-right font-mono text-xs">
+                <div className="text-left sm:text-right font-mono text-xs">
                   <div className="text-slate-400">CREDENTIAL ID</div>
                   <div className="text-cyan-axon font-bold text-sm tracking-wider">
                     {result.certCode}
@@ -157,9 +222,7 @@ export default function VerificationEngine({ initialCode = "" }: VerificationEng
                       <Building className="w-3.5 h-3.5 text-cyan-axon" />
                       <span>ISSUER AUTHORITY</span>
                     </div>
-                    <div className="text-slate-300">
-                      {result.issuerAuthority}
-                    </div>
+                    <div className="text-slate-300">{result.issuerAuthority}</div>
                   </div>
                 </div>
 
@@ -169,9 +232,7 @@ export default function VerificationEngine({ initialCode = "" }: VerificationEng
                       <Calendar className="w-3.5 h-3.5 text-cyan-axon" />
                       <span>DATE OF OFFICIAL ISSUANCE</span>
                     </div>
-                    <div className="text-slate-200">
-                      {result.issueDate}
-                    </div>
+                    <div className="text-slate-200">{result.issueDate}</div>
                   </div>
 
                   <div>
@@ -189,8 +250,18 @@ export default function VerificationEngine({ initialCode = "" }: VerificationEng
               {/* Institutional Footer Seal */}
               <div className="pt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between text-[11px] font-mono text-slate-400 gap-2">
                 <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-circuit-green"></span>
-                  <span>RECORD PERMANENTLY ANCHORED IN AXON IMAC ARCHIVES</span>
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      result.status === "Active"
+                        ? "bg-circuit-green"
+                        : "bg-red-500"
+                    }`}
+                  ></span>
+                  <span>
+                    {result.status === "Active"
+                      ? "RECORD PERMANENTLY ANCHORED IN AXON IMAC ARCHIVES"
+                      : "CREDENTIAL REVOKED BY AXON EXECUTIVE COUNCIL"}
+                  </span>
                 </div>
                 <div className="text-slate-400">
                   UET LAHORE CHAPTER // NODE 01
@@ -204,11 +275,18 @@ export default function VerificationEngine({ initialCode = "" }: VerificationEng
                 Credential Record Not Found
               </h3>
               <p className="text-xs font-mono text-slate-400 max-w-md mx-auto mb-4">
-                The identifier <span className="text-white font-bold">&quot;{query}&quot;</span> does not match any active certificate or member identity in the AXON verification registry.
+                The identifier{" "}
+                <span className="text-white font-bold">&quot;{query}&quot;</span>{" "}
+                does not match any active certificate or member identity in the
+                AXON verification registry.
               </p>
               <div className="text-[11px] font-mono text-slate-400">
-                If you believe this is an administrative discrepancy, contact the AXON Executive Council at{" "}
-                <a href="mailto:axon@askme.pk" className="text-cyan-axon underline">
+                If you believe this is an administrative discrepancy, contact
+                the AXON Executive Council at{" "}
+                <a
+                  href="mailto:axon@askme.pk"
+                  className="text-cyan-axon underline"
+                >
                   axon@askme.pk
                 </a>
               </div>

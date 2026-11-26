@@ -1,18 +1,24 @@
 import React from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, BookOpen, Clock, Calendar, User } from "lucide-react";
-import { BLOGS } from "@/data/axonData";
+import { ArrowRight, Clock, Calendar } from "lucide-react";
+import { readDb } from "@/lib/db";
 
-export const metadata = {
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
   title: "Engineering Insights & Publications",
   description:
     "Peer-reviewed engineering monographs, distributed systems research, and technical tutorials authored by AXON engineers at IMAC UET Lahore.",
+  alternates: { canonical: "https://axon.org.pk/blogs" },
 };
 
 export default function BlogsPage() {
+  const db = readDb();
+  const publishedBlogs = db.blogs.filter((b) => b.status === "Published");
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-      {/* Editorial Header */}
       <div className="max-w-4xl border-b border-void-border pb-12 mb-12">
         <div className="text-xs font-mono uppercase tracking-widest text-cyan-axon mb-3">
           TECHNICAL PUBLICATIONS // RESEARCH ESSAYS
@@ -21,13 +27,14 @@ export default function BlogsPage() {
           AXON Engineering Monographs & Technical Insights
         </h1>
         <p className="mt-6 text-base sm:text-lg text-slate-300 font-sans leading-relaxed">
-          In-depth technical papers, architecture retrospectives, and systems programming tutorials authored by AXON research fellows and directorate leads.
+          In-depth technical papers, architecture retrospectives, and systems
+          programming tutorials authored by AXON research fellows and
+          directorate leads.
         </p>
       </div>
 
-      {/* Articles Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {BLOGS.map((post) => (
+        {publishedBlogs.map((post) => (
           <article
             key={post.id}
             className="p-8 rounded-xl bg-void-card border border-void-border hover:border-slate-600 transition-all flex flex-col justify-between"
