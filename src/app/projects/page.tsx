@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Student Engineering Projects",
   description:
-    "Open-source systems engines, AI pipelines, and hardware repositories built by verified AXON member engineers and synced with GitHub.",
-  alternates: { canonical: "https://axon.org.pk/projects" },
+    "Open-source systems engines, AI pipelines, and hardware repositories built by verified AXON member engineers and approved for public showcase.",
+  alternates: { canonical: "https://askme.pk/projects" },
 };
 
 export default function ProjectsPage() {

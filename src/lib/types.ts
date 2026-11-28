@@ -1,9 +1,13 @@
-export type RbacRole =
-  | "public_visitor"
-  | "pending_applicant"
-  | "approved_member"
-  | "wing_director"
-  | "super_admin";
+export type PortalRole =
+  | "PUBLIC_VISITOR"
+  | "PENDING_APPLICANT"
+  | "APPROVED_MEMBER"
+  | "CO_DIRECTOR"
+  | "DIRECTOR"
+  | "CORE_LEAD"
+  | "CORE_AUDITOR"
+  | "ADVISOR"
+  | "SUPER_ADMIN";
 
 export type PortfolioTheme =
   | "obsidian-cyan"
@@ -19,6 +23,11 @@ export interface Wing {
   code: string;
   lead: string;
   leadUsername: string;
+  coLead: string;
+  coLeadUsername: string;
+  /** Internal only — MUST NEVER be displayed on public pages (/about, /wings) */
+  reportsTo: string;
+  reportsToUsername: string;
   role: string;
   tagline: string;
   mandate: string;
@@ -26,6 +35,35 @@ export interface Wing {
   tools: string[];
   status: "Active" | "Incubating" | "Expanding";
   initiativesCount: number;
+}
+
+export interface WingTask {
+  id: string;
+  wingId: string;
+  title: string;
+  ownerName: string;
+  ownerRole: string;
+  status: "Planned" | "In Progress" | "Completed";
+  dueDate: string;
+}
+
+export interface AuditLog {
+  id: string;
+  actorName: string;
+  actorRole: PortalRole;
+  action: string;
+  target: string;
+  timestamp: string;
+}
+
+export interface FinanceRecord {
+  id: string;
+  title: string;
+  wingId: string;
+  category: "Budget Allocation" | "Sponsorship" | "Expense";
+  amountPkr: number;
+  status: "Approved" | "Pending Audit" | "Settled";
+  date: string;
 }
 
 export interface AxonEvent {
@@ -37,14 +75,17 @@ export interface AxonEvent {
     | "Technical Workshop"
     | "Bootcamp"
     | "Symposium"
-    | "Orientation";
+    | "Orientation"
+    | "Launch Event";
   date: string;
   time: string;
   location: string;
   isVirtual: boolean;
-  status: "Scheduled" | "Completed" | "Registrations Open";
+  status: "Pending Approval" | "Scheduled" | "Completed" | "Registrations Open" | "Rejected";
   wingId: string;
   capacity: number;
+  attendeeCount: number;
+  submittedBy: string;
   speaker: {
     name: string;
     title: string;
@@ -83,6 +124,7 @@ export interface Project {
   techStack: string[];
   githubRepo: string;
   liveDemoUrl?: string;
+  coverImage?: string;
   stars: number;
   forks: number;
   primaryLanguage?: string;
@@ -121,7 +163,8 @@ export interface VerifiedCertificate {
     | "Leadership Appointment"
     | "Workshop Speaker"
     | "Technical Distinction"
-    | "Hackathon Winner";
+    | "Hackathon Winner"
+    | "Event Attendance";
   hash: string;
 }
 
@@ -141,18 +184,30 @@ export interface AxonMember {
   name: string;
   headline: string;
   memberId: string;
-  role: string;
-  rbacRole: RbacRole;
+  designation: string;
+  category: "Patron" | "Core" | "Core (Independent Audit Line)" | "Directorate" | "Member";
+  /** Internal only for public visibility rules */
+  supervisedWings: string[];
+  reportsTo?: string;
+  portalResponsibilities?: string;
+  rbacRole: PortalRole;
   wing: string;
   wingId: string;
   chapter: string;
-  status: "Active Member" | "Wing Director" | "Executive Council" | "Pending Review";
+  status:
+    | "Active Member"
+    | "Director"
+    | "Co-Director"
+    | "Executive Council"
+    | "Faculty Patron"
+    | "Pending Review";
   avatar: string;
   bio: string;
   github: string;
   githubUsername: string;
   linkedin: string;
   email: string;
+  resumeUrl?: string;
   graduationYear: number;
   internshipAvailable: boolean;
   themePreference: PortfolioTheme;
@@ -186,7 +241,7 @@ export interface MembershipApplication {
   githubUsername: string;
   statement: string;
   status: "Pending" | "Approved" | "Rejected";
-  assignedRole?: RbacRole;
+  assignedRole?: PortalRole;
   generatedMemberId?: string;
   generatedUsername?: string;
   submittedAt: string;
@@ -203,19 +258,28 @@ export interface ContactInquiry {
   createdAt: string;
 }
 
+export interface OtpChallenge {
+  email: string;
+  codeHash: string;
+  expiresAt: number;
+  attempts: number;
+}
+
 export interface SessionUser {
   username: string;
   name: string;
   email: string;
   memberId: string;
-  rbacRole: RbacRole;
+  rbacRole: PortalRole;
   wingId: string;
   wing: string;
+  supervisedWings: string[];
   avatar: string;
 }
 
 export interface AxonDatabaseState {
   members: Record<string, AxonMember>;
+  events: AxonEvent[];
   projects: Project[];
   blogs: BlogPost[];
   certificates: VerifiedCertificate[];
@@ -223,4 +287,8 @@ export interface AxonDatabaseState {
   rsvps: EventRsvp[];
   endorsements: Endorsement[];
   inquiries: ContactInquiry[];
+  wingTasks: WingTask[];
+  financeRecords: FinanceRecord[];
+  auditLogs: AuditLog[];
+  otpChallenges: Record<string, OtpChallenge>;
 }

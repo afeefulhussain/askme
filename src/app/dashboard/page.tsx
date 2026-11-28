@@ -2,7 +2,7 @@ import React from "react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth";
-import { findMemberByEmailOrRole, getMemberByUsername, readDb } from "@/lib/db";
+import { findMemberByEmail, getMemberByUsername, readDb } from "@/lib/db";
 import { WINGS } from "@/data/axonData";
 import MemberDashboardClient from "@/components/MemberDashboardClient";
 
@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Member Operations Workspace",
-  description: "Authenticated AXON Member Dashboard, Digital ID, and Portfolio Builder.",
+  description:
+    "Authenticated AXON Member Dashboard, Digital ID, Upload Suite, and Portfolio Builder.",
   robots: { index: false, follow: false },
 };
 
@@ -22,8 +23,7 @@ export default function MemberDashboardPage() {
 
   const db = readDb();
   const member =
-    getMemberByUsername(session.username) ||
-    findMemberByEmailOrRole(session.email, session.rbacRole);
+    getMemberByUsername(session.username) || findMemberByEmail(session.email);
 
   if (!member) {
     redirect("/login");

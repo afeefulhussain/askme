@@ -13,14 +13,14 @@ function escapeXml(value: string): string {
 }
 
 export async function GET(req: NextRequest) {
-  const username = req.nextUrl.searchParams.get("username") || "irfan";
+  const username = req.nextUrl.searchParams.get("username") || "afeef";
   const member = getMemberByUsername(username);
 
   const name = escapeXml(member?.name || "AXON Member Engineer");
   const headline = escapeXml(
-    member?.headline || "Verified Member — AXON Umbrella Organization"
+    member?.headline || "Verified Member — AXON (Together We Transmit)"
   );
-  const memberId = escapeXml(member?.memberId || "AXN-2026");
+  const memberId = escapeXml(member?.memberId || "AXN-26-313");
   const wing = escapeXml(member?.wing || "IMAC, UET Lahore");
   const skills = escapeXml(
     member?.skills.languages.slice(0, 5).join("  •  ") || "Engineering"
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
   <text x="76" y="384" fill="#94A3B8" font-family="monospace" font-size="22">${wing}</text>
   <line x1="76" y1="470" x2="1124" y2="470" stroke="#1E2738" stroke-width="2"/>
   <text x="76" y="532" fill="#CBD5E1" font-family="monospace" font-size="20">${skills}</text>
-  <text x="1124" y="532" text-anchor="end" fill="#00F0FF" font-family="monospace" font-size="20">axon.org.pk/u/${safeUser}</text>
+  <text x="1124" y="532" text-anchor="end" fill="#00F0FF" font-family="monospace" font-size="20">askme.pk/u/${safeUser}</text>
 </svg>`;
 
   return new NextResponse(svg, {

@@ -18,16 +18,20 @@ export default function Footer() {
       <div className="border-b border-void-border/60 py-6 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded bg-void-card border border-void-border flex items-center justify-center font-bold text-cyan-axon">
-              AX
+            <div className="w-9 h-9 rounded bg-void-card border border-void-border flex items-center justify-center p-1">
+              <img
+                src="/assets/axon-mark.svg"
+                alt="AXON Brand Mark"
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <div className="text-white font-serif text-sm font-semibold tracking-wide">
-                AXON Technology Umbrella
+                AXON — Together We Transmit.
               </div>
               <div className="text-[11px] text-slate-400">
                 Originating at IMAC, University of Engineering & Technology (UET)
-                Lahore
+                Lahore • askme.pk
               </div>
             </div>
           </div>

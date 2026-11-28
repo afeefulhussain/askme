@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
 import { createEventRsvpRecord, readDb } from "@/lib/db";
-import { EVENTS } from "@/data/axonData";
+import { rsvpSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -33,23 +33,34 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = getServerSession();
   try {
-    const body = (await req.json()) as {
-      eventSlug?: string;
-      name?: string;
-      email?: string;
-      university?: string;
-    };
-
-    const event = EVENTS.find((e) => e.slug === body.eventSlug);
-    if (!event) {
-      return NextResponse.json({ error: "Event not found." }, { status: 404 });
+    const raw = await req.json();
+    const parsed = rsvpSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || "Invalid RSVP payload." },
+        { status: 400 }
+      );
     }
 
-    // Supports One-Click RSVP when authenticated (Blueprint Section 10)
-    const name = session?.name || body.name?.trim() || "";
-    const email = session?.email || body.email?.trim() || "";
+    const db = readDb();
+    const event = db.events.find(
+      (e) =>
+        e.slug === parsed.data.eventSlug &&
+        e.status !== "Pending Approval" &&
+        e.status !== "Rejected"
+    );
+    if (!event) {
+      return NextResponse.json(
+        { error: "Public event not found or awaiting approval." },
+        { status: 404 }
+      );
+    }
+
+    const name = session?.name || parsed.data.name?.trim() || "";
+    const email = session?.email || parsed.data.email?.trim() || "";
     const university =
-      (session ? "AXON Verified Member" : body.university?.trim()) || "UET Lahore";
+      (session ? "AXON Verified Member" : parsed.data.university?.trim()) ||
+      "UET Lahore";
 
     if (!name || !email) {
       return NextResponse.json(

@@ -15,6 +15,7 @@ import {
   LogOut,
 } from "lucide-react";
 import type { SessionUser } from "@/lib/types";
+import { canAccessAdmin, canAccessDashboard } from "@/lib/rbac";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -95,8 +96,7 @@ export default function Navbar() {
               <>
                 <Link
                   href={
-                    sessionUser.rbacRole === "super_admin" ||
-                    sessionUser.rbacRole === "wing_director"
+                    canAccessAdmin(sessionUser.rbacRole)
                       ? "/admin"
                       : "/dashboard"
                   }
@@ -119,7 +119,7 @@ export default function Navbar() {
                 href="/login"
                 className="text-slate-400 hover:text-white transition-colors"
               >
-                PORTAL LOGIN
+                OTP PORTAL LOGIN
               </Link>
             )}
           </div>
@@ -131,16 +131,19 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-16">
           {/* Logo & Brand Identity */}
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-9 h-9 rounded bg-void-card border border-void-border flex items-center justify-center font-mono font-bold text-base text-cyan-axon shadow-sm group-hover:border-cyan-axon/60 transition-colors">
-              <span className="tracking-tighter">A</span>
-              <span className="text-slate-400 text-xs">X</span>
+            <div className="w-9 h-9 rounded bg-void-card border border-void-border flex items-center justify-center p-1 shadow-sm group-hover:border-cyan-axon/60 transition-colors">
+              <img
+                src="/assets/axon-mark.svg"
+                alt="AXON Brand Mark"
+                className="w-full h-full object-contain"
+              />
             </div>
             <div className="flex flex-col">
               <span className="font-serif text-lg font-bold tracking-tight text-white group-hover:text-cyan-axon transition-colors">
                 AXON
               </span>
-              <span className="text-[10px] font-mono tracking-widest text-slate-400 uppercase -mt-1">
-                Technology Umbrella
+              <span className="text-[10px] font-mono tracking-wider text-slate-400 uppercase -mt-1">
+                Together We Transmit
               </span>
             </div>
           </Link>
@@ -281,7 +284,7 @@ export default function Navbar() {
 
           {/* Right Action CTAs */}
           <div className="hidden sm:flex items-center gap-3">
-            {sessionUser && sessionUser.rbacRole !== "pending_applicant" ? (
+            {sessionUser && canAccessDashboard(sessionUser.rbacRole) ? (
               <Link
                 href="/dashboard"
                 className="px-4 py-2 text-xs font-mono uppercase tracking-wider text-void-500 bg-cyan-axon hover:bg-cyan-300 font-semibold rounded transition-all shadow-[0_0_15px_rgba(0,240,255,0.25)] flex items-center gap-1.5"

@@ -4,7 +4,10 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Calendar, Clock, MapPin, ArrowLeft } from "lucide-react";
 import { EVENTS } from "@/data/axonData";
+import { readDb } from "@/lib/db";
 import EventRsvpPanel from "@/components/EventRsvpPanel";
+
+export const dynamic = "force-dynamic";
 
 interface PageProps {
   params: {
@@ -21,17 +24,29 @@ export async function generateStaticParams() {
 export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
-  const event = EVENTS.find((e) => e.slug === params.slug);
+  const db = readDb();
+  const event = db.events.find(
+    (e) =>
+      e.slug === params.slug &&
+      e.status !== "Pending Approval" &&
+      e.status !== "Rejected"
+  );
   if (!event) return { title: "Event Not Found" };
   return {
     title: event.title,
     description: event.description,
-    alternates: { canonical: `https://axon.org.pk/events/${event.slug}` },
+    alternates: { canonical: `https://askme.pk/events/${event.slug}` },
   };
 }
 
 export default function EventDetailPage({ params }: PageProps) {
-  const event = EVENTS.find((e) => e.slug === params.slug);
+  const db = readDb();
+  const event = db.events.find(
+    (e) =>
+      e.slug === params.slug &&
+      e.status !== "Pending Approval" &&
+      e.status !== "Rejected"
+  );
 
   if (!event) {
     notFound();
@@ -52,7 +67,7 @@ export default function EventDetailPage({ params }: PageProps) {
     location: event.isVirtual
       ? {
           "@type": "VirtualLocation",
-          url: `https://axon.org.pk/events/${event.slug}`,
+          url: `https://askme.pk/events/${event.slug}`,
         }
       : {
           "@type": "Place",
@@ -68,7 +83,7 @@ export default function EventDetailPage({ params }: PageProps) {
     organizer: {
       "@type": "Organization",
       name: "AXON",
-      url: "https://axon.org.pk",
+      url: "https://askme.pk",
     },
   };
 

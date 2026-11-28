@@ -18,6 +18,7 @@ import {
   RefreshCw,
   AlertCircle,
   Lock,
+  Upload,
 } from "lucide-react";
 import DigitalIdCard from "@/components/DigitalIdCard";
 import type {
@@ -28,7 +29,7 @@ import type {
   VerifiedCertificate,
   Wing,
 } from "@/lib/types";
-import { formatRbacLabel } from "@/lib/rbac";
+import { canAccessAdmin, formatRbacLabel } from "@/lib/rbac";
 
 interface MemberDashboardClientProps {
   initialMember: AxonMember;
@@ -55,6 +56,8 @@ export default function MemberDashboardClient({
   const [bio, setBio] = useState(member.bio);
   const [githubUsername, setGithubUsername] = useState(member.githubUsername);
   const [linkedin, setLinkedin] = useState(member.linkedin);
+  const [avatarUrl, setAvatarUrl] = useState(member.avatar);
+  const [resumeUrl, setResumeUrl] = useState(member.resumeUrl || "");
   const [graduationYear, setGraduationYear] = useState(member.graduationYear);
   const [internshipAvailable, setInternshipAvailable] = useState(
     member.internshipAvailable
@@ -73,19 +76,24 @@ export default function MemberDashboardClient({
   );
   const [savingPortfolio, setSavingPortfolio] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [uploadingAsset, setUploadingAsset] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
-  // GitHub Project Submission state
+  // Project Submission state (starts "Under Review" until Super Admin approves)
   const [projectList, setProjectList] = useState<Project[]>(initialProjects);
   const [repoUrl, setRepoUrl] = useState("");
   const [projTitle, setProjTitle] = useState("");
   const [projArchitecture, setProjArchitecture] = useState("");
   const [projDemoUrl, setProjDemoUrl] = useState("");
-  const [projWing, setProjWing] = useState(member.wingId);
+  const [projCoverUrl, setProjCoverUrl] = useState("");
+  const [projWing, setProjWing] = useState(
+    wings.some((w) => w.id === member.wingId) ? member.wingId : "technical"
+  );
   const [syncingRepo, setSyncingRepo] = useState(false);
   const [projMessage, setProjMessage] = useState<string | null>(null);
   const [projError, setProjError] = useState<string | null>(null);
 
-  // Blog Draft state
+  // Blog Draft state (starts "Pending Review" until Super Admin approves)
   const [blogList, setBlogList] = useState<BlogPost[]>(initialBlogs);
   const [blogTitle, setBlogTitle] = useState("");
   const [blogSummary, setBlogSummary] = useState("");
@@ -93,9 +101,10 @@ export default function MemberDashboardClient({
   const [blogContent, setBlogContent] = useState("");
   const [submittingBlog, setSubmittingBlog] = useState(false);
   const [blogSuccess, setBlogSuccess] = useState<string | null>(null);
+  const [blogError, setBlogError] = useState<string | null>(null);
 
-  // Pending Applicant strict RBAC lock (Blueprint 8.1 & 8.8)
-  if (member.rbacRole === "pending_applicant") {
+  // Pending Applicant strict lock
+  if (member.rbacRole === "PENDING_APPLICANT") {
     return (
       <div className="max-w-3xl mx-auto px-4 py-16 font-mono text-xs">
         <div className="p-8 rounded-2xl bg-void-card border border-yellow-500/40 text-center space-y-5">
@@ -106,21 +115,20 @@ export default function MemberDashboardClient({
             RBAC STATUS: PENDING APPLICANT
           </div>
           <h1 className="font-serif text-2xl sm:text-3xl font-bold text-white font-sans">
-            Application Under Directorate Review
+            Application Under Council Review
           </h1>
           <p className="text-sm text-slate-300 font-sans leading-relaxed max-w-xl mx-auto">
             Hello <strong>{member.name}</strong> ({member.email}). Your
             application for <strong>{member.wing}</strong> is currently pending
-            approval by the Executive Council. Per AXON RBAC policies, Digital
-            ID generation, GitHub project linking, and blog submissions unlock
-            immediately upon approval.
+            approval. Digital ID generation, project submissions, and file
+            uploads unlock automatically once inducted.
           </p>
           <div className="pt-2 flex flex-wrap justify-center gap-3">
             <Link
               href="/wings"
               className="px-5 py-2.5 bg-void-subtle border border-void-border text-slate-200 rounded hover:border-cyan-axon"
             >
-              Browse Directorates
+              Browse 11 Wings
             </Link>
             <Link
               href="/events"
@@ -133,6 +141,35 @@ export default function MemberDashboardClient({
       </div>
     );
   }
+
+  const handleUploadFile = async (
+    file: File | undefined,
+    bucket: "avatars" | "project-covers" | "resumes",
+    onSuccess: (url: string) => void
+  ) => {
+    if (!file) return;
+    setUploadingAsset(bucket);
+    setUploadError(null);
+    try {
+      const formData = new FormData();
+      formData.append("bucket", bucket);
+      formData.append("file", file);
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok || !data.url) {
+        setUploadError(data.error || "Upload failed.");
+      } else {
+        onSuccess(data.url);
+      }
+    } catch {
+      setUploadError("Network error while uploading file.");
+    } finally {
+      setUploadingAsset(null);
+    }
+  };
 
   const handleSavePortfolio = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,6 +191,8 @@ export default function MemberDashboardClient({
           bio,
           githubUsername,
           linkedin,
+          avatar: avatarUrl,
+          resumeUrl: resumeUrl || undefined,
           graduationYear: Number(graduationYear) || 2027,
           internshipAvailable,
           themePreference,
@@ -191,26 +230,26 @@ export default function MemberDashboardClient({
           title: projTitle,
           architecture: projArchitecture,
           liveDemoUrl: projDemoUrl,
+          coverImage: projCoverUrl || undefined,
           wingId: projWing,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setProjError(data.error || "Unable to sync GitHub repository.");
+        setProjError(data.error || "Unable to submit repository.");
       } else {
         setProjectList([data.project, ...projectList]);
         setRepoUrl("");
         setProjTitle("");
         setProjArchitecture("");
         setProjDemoUrl("");
+        setProjCoverUrl("");
         setProjMessage(
-          data.synced?.syncedLive
-            ? `Live synced from GitHub REST API (${data.synced.stars} stars, ${data.synced.primaryLanguage}).`
-            : "Repository verified and added to AXON Showcase."
+          `Project submitted with status "${data.project.status}". It will appear publicly on /projects once approved by the Super Admin.`
         );
       }
     } catch {
-      setProjError("Network error while syncing repository.");
+      setProjError("Network error while submitting project.");
     } finally {
       setSyncingRepo(false);
     }
@@ -220,6 +259,7 @@ export default function MemberDashboardClient({
     e.preventDefault();
     setSubmittingBlog(true);
     setBlogSuccess(null);
+    setBlogError(null);
 
     try {
       const res = await fetch("/api/blogs", {
@@ -235,16 +275,16 @@ export default function MemberDashboardClient({
             .filter(Boolean),
         }),
       });
-      if (res.ok) {
-        const data = await res.json();
+      const data = await res.json();
+      if (!res.ok) {
+        setBlogError(data.error || "Failed to submit article.");
+      } else {
         setBlogList([data.blog, ...blogList]);
         setBlogTitle("");
         setBlogSummary("");
         setBlogContent("");
         setBlogSuccess(
-          data.blog.status === "Published"
-            ? "Article published directly to /blogs."
-            : "Draft submitted to Wing Director / Admin moderation queue."
+          `Article submitted as "${data.blog.status}". Super Admin approval is required before public listing on /blogs.`
         );
       }
     } finally {
@@ -262,16 +302,25 @@ export default function MemberDashboardClient({
           <div className="flex items-center gap-2 text-cyan-axon text-[11px] mb-1">
             <span className="w-2 h-2 rounded-full bg-circuit-green"></span>
             <span>
-              AUTHENTICATED SESSION // RBAC: {formatRbacLabel(member.rbacRole).toUpperCase()}
+              AUTHENTICATED SESSION // {formatRbacLabel(member.rbacRole).toUpperCase()}
             </span>
           </div>
           <h1 className="font-serif text-2xl sm:text-3xl font-bold text-white font-sans">
             Member Operations Workspace
           </h1>
           <p className="text-slate-400 text-xs mt-0.5">
-            Logged in as <strong className="text-white">{member.name}</strong> (
+            Signed in as <strong className="text-white">{member.name}</strong> (
             {member.memberId}) — {member.wing}
           </p>
+          {/* Internal-only reporting visibility (hidden from public pages) */}
+          {member.reportsTo && (
+            <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 rounded bg-void-card border border-void-border text-[11px] text-slate-300">
+              <span className="text-cyan-axon font-semibold">
+                INTERNAL SUPERVISION LINE:
+              </span>
+              <span>Reports To {member.reportsTo} (Core Coordinator)</span>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -288,16 +337,15 @@ export default function MemberDashboardClient({
             className="px-4 py-2 bg-void-card border border-circuit-green/40 text-circuit-green rounded hover:bg-circuit-green/10 flex items-center gap-1.5 transition-colors"
           >
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Verification Status</span>
+            <span>Verification Seal</span>
           </Link>
 
-          {(member.rbacRole === "super_admin" ||
-            member.rbacRole === "wing_director") && (
+          {canAccessAdmin(member.rbacRole) && (
             <Link
               href="/admin"
               className="px-4 py-2 bg-cyan-axon text-void-500 font-bold rounded hover:bg-cyan-300 transition-colors"
             >
-              Open Council Admin
+              Open Council / Wing Console →
             </Link>
           )}
         </div>
@@ -313,7 +361,7 @@ export default function MemberDashboardClient({
             {member.portfolioViews.toLocaleString()}
           </div>
           <div className="text-[10px] text-circuit-green mt-0.5">
-            Public SEO Indexed
+            askme.pk/u/{member.username}
           </div>
         </div>
 
@@ -323,7 +371,7 @@ export default function MemberDashboardClient({
           </div>
           <div className="text-2xl font-bold text-white mt-1">{totalStars}</div>
           <div className="text-[10px] text-cyan-axon mt-0.5">
-            {projectList.length} Synced Repos
+            {projectList.length} Submitted Repos
           </div>
         </div>
 
@@ -335,7 +383,7 @@ export default function MemberDashboardClient({
             {initialCertificates.length}
           </div>
           <div className="text-[10px] text-circuit-green mt-0.5">
-            Cryptographically Sealed
+            SHA-160 Anchored
           </div>
         </div>
 
@@ -357,9 +405,9 @@ export default function MemberDashboardClient({
         {(
           [
             { id: "id-card", label: "Digital Student ID", icon: CreditCard },
-            { id: "portfolio", label: "Portfolio Builder", icon: User },
-            { id: "projects", label: "GitHub Sync", icon: Code },
-            { id: "blogs", label: "Article Drafts", icon: FileText },
+            { id: "portfolio", label: "Portfolio & Resume", icon: User },
+            { id: "projects", label: "Submit Project", icon: Code },
+            { id: "blogs", label: "Submit Article", icon: FileText },
             { id: "certificates", label: "Credential Vault", icon: Award },
           ] as const
         ).map((tab) => {
@@ -387,13 +435,12 @@ export default function MemberDashboardClient({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
           <div className="no-print">
             <div className="text-white font-serif font-bold text-xl mb-2 font-sans">
-              Auto-Generated Member Credential
+              Institutional Member Credential
             </div>
             <p className="text-slate-400 text-xs leading-relaxed font-sans mb-6">
-              Your institutional ID is automatically compiled by the AXON Council
-              upon admission approval. It embeds a scannable ISO QR code routing
-              to the public verification registry and supports high-resolution
-              PNG and vector PDF export.
+              Your AXN-26 credential embeds a scannable QR verification route to{" "}
+              <code className="text-cyan-axon">askme.pk/verify</code> and
+              supports PNG and vector PDF export.
             </p>
 
             <div className="p-4 rounded-lg bg-void-card border border-void-border space-y-2 mb-6">
@@ -401,14 +448,19 @@ export default function MemberDashboardClient({
                 SPECIFICATIONS
               </div>
               <div>
-                • Unique Identifier:{" "}
+                • Member ID:{" "}
                 <span className="text-cyan-axon font-bold">
                   {member.memberId}
                 </span>
               </div>
-              <div>• Tenure Validity: 2026 – 2028 Academic Cycle</div>
+              <div>• Designation: {member.designation}</div>
+              <div>• Directorate: {member.wing}</div>
               <div>• Chapter Node: {member.chapter}</div>
-              <div>• Verification Protocol: SHA-160 Secure Digest</div>
+              {member.portalResponsibilities && (
+                <div className="pt-2 border-t border-void-border/50 text-slate-300">
+                  • Scope: {member.portalResponsibilities}
+                </div>
+              )}
             </div>
           </div>
 
@@ -418,7 +470,7 @@ export default function MemberDashboardClient({
         </div>
       )}
 
-      {/* Tab 2: Portfolio Builder */}
+      {/* Tab 2: Portfolio Builder & Uploads */}
       {activeTab === "portfolio" && (
         <form
           onSubmit={handleSavePortfolio}
@@ -427,10 +479,10 @@ export default function MemberDashboardClient({
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-void-border pb-4">
             <div>
               <h2 className="font-serif text-xl font-bold text-white font-sans">
-                Live Portfolio Builder
+                Live Portfolio & File Uploads
               </h2>
               <p className="text-slate-400 text-xs">
-                Updates save immediately to your shareable URL:{" "}
+                Updates publish immediately to{" "}
                 <Link
                   href={`/u/${member.username}`}
                   className="text-cyan-axon underline"
@@ -445,6 +497,89 @@ export default function MemberDashboardClient({
                 <span>Saved to Registry!</span>
               </span>
             )}
+          </div>
+
+          {uploadError && (
+            <div className="p-3 rounded bg-red-500/10 border border-red-500/40 text-red-400 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{uploadError}</span>
+            </div>
+          )}
+
+          {/* Avatar & Resume File Uploaders */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-lg bg-void-subtle border border-void-border">
+            <div>
+              <label className="block text-slate-300 mb-1.5 uppercase text-[11px]">
+                Profile Portrait (PNG / JPEG / WebP)
+              </label>
+              <div className="flex items-center gap-3">
+                <img
+                  src={avatarUrl}
+                  alt={member.name}
+                  width={44}
+                  height={44}
+                  className="w-11 h-11 rounded object-cover border border-void-border"
+                />
+                <label className="px-3 py-2 bg-void-card border border-void-border hover:border-cyan-axon rounded cursor-pointer flex items-center gap-1.5 text-[11px]">
+                  <Upload className="w-3.5 h-3.5 text-cyan-axon" />
+                  <span>
+                    {uploadingAsset === "avatars"
+                      ? "Uploading..."
+                      : "Upload Avatar"}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={(e) =>
+                      handleUploadFile(
+                        e.target.files?.[0],
+                        "avatars",
+                        (url) => setAvatarUrl(url)
+                      )
+                    }
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-slate-300 mb-1.5 uppercase text-[11px]">
+                Recruiter Resume (PDF, Max 5MB)
+              </label>
+              <div className="flex items-center gap-3">
+                <label className="px-3 py-2 bg-void-card border border-void-border hover:border-cyan-axon rounded cursor-pointer flex items-center gap-1.5 text-[11px]">
+                  <Upload className="w-3.5 h-3.5 text-circuit-green" />
+                  <span>
+                    {uploadingAsset === "resumes"
+                      ? "Uploading..."
+                      : "Upload Resume PDF"}
+                  </span>
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    className="hidden"
+                    onChange={(e) =>
+                      handleUploadFile(
+                        e.target.files?.[0],
+                        "resumes",
+                        (url) => setResumeUrl(url)
+                      )
+                    }
+                  />
+                </label>
+                {resumeUrl && (
+                  <a
+                    href={resumeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-cyan-axon underline text-[11px] truncate max-w-[160px]"
+                  >
+                    PDF Attached →
+                  </a>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -462,7 +597,7 @@ export default function MemberDashboardClient({
 
             <div className="md:col-span-2">
               <label className="block text-slate-300 mb-1.5 uppercase text-[11px]">
-                Long-Form Technical Bio / Story
+                Technical Bio / Story
               </label>
               <textarea
                 rows={4}
@@ -474,7 +609,7 @@ export default function MemberDashboardClient({
 
             <div>
               <label className="block text-slate-300 mb-1.5 uppercase text-[11px]">
-                GitHub Username
+                GitHub Username (Manual Link)
               </label>
               <input
                 type="text"
@@ -571,7 +706,8 @@ export default function MemberDashboardClient({
                   className="accent-cyan-400"
                 />
                 <span>
-                  Display &quot;Available for Internships / Engineering Roles&quot; badge on portfolio & talent directory
+                  Display &quot;Available for Internships / Roles&quot; badge on
+                  public talent directory
                 </span>
               </label>
             </div>
@@ -596,18 +732,18 @@ export default function MemberDashboardClient({
         </form>
       )}
 
-      {/* Tab 3: GitHub Projects Sync */}
+      {/* Tab 3: Project Submission */}
       {activeTab === "projects" && (
         <div className="space-y-8">
           <div className="p-6 rounded-xl bg-void-card border border-void-border">
             <h2 className="font-serif text-lg font-bold text-white mb-2 font-sans">
-              Link GitHub Repository (Live GitHub REST Sync)
+              Submit GitHub Project for Super Admin Review
             </h2>
             <p className="text-slate-400 text-xs mb-4">
-              Paste any GitHub repository URL (e.g.,{" "}
-              <code className="text-cyan-axon">https://github.com/vercel/next.js</code>
-              ). Our backend queries the GitHub API for star counts, forks,
-              and primary languages automatically.
+              Paste your public GitHub repository URL directly (no GitHub OAuth
+              login required). All member submissions enter{" "}
+              <strong className="text-yellow-400">Under Review</strong> until
+              approved by the Super Admin.
             </p>
 
             {projError && (
@@ -658,7 +794,7 @@ export default function MemberDashboardClient({
                     type="url"
                     value={projDemoUrl}
                     onChange={(e) => setProjDemoUrl(e.target.value)}
-                    placeholder="https://demo.axon.org.pk"
+                    placeholder="https://demo.askme.pk"
                     className="w-full bg-void-400 border border-void-border rounded px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-axon text-xs"
                   />
                 </div>
@@ -678,7 +814,7 @@ export default function MemberDashboardClient({
                     ))}
                   </select>
                 </div>
-                <div className="md:col-span-2">
+                <div>
                   <label className="block text-slate-300 mb-1.5 uppercase text-[11px]">
                     Architecture Summary (Optional)
                   </label>
@@ -686,9 +822,41 @@ export default function MemberDashboardClient({
                     type="text"
                     value={projArchitecture}
                     onChange={(e) => setProjArchitecture(e.target.value)}
-                    placeholder="Briefly describe the technical architecture, benchmarks, or deployment..."
+                    placeholder="Technical design, benchmarks, stack..."
                     className="w-full bg-void-400 border border-void-border rounded px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-axon text-xs"
                   />
+                </div>
+                <div>
+                  <label className="block text-slate-300 mb-1.5 uppercase text-[11px]">
+                    Project Cover Image (Optional)
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <label className="px-3 py-2 bg-void-subtle border border-void-border hover:border-cyan-axon rounded cursor-pointer flex items-center gap-1.5 text-[11px]">
+                      <Upload className="w-3.5 h-3.5 text-cyan-axon" />
+                      <span>
+                        {uploadingAsset === "project-covers"
+                          ? "Uploading..."
+                          : "Upload Cover"}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={(e) =>
+                          handleUploadFile(
+                            e.target.files?.[0],
+                            "project-covers",
+                            (url) => setProjCoverUrl(url)
+                          )
+                        }
+                      />
+                    </label>
+                    {projCoverUrl && (
+                      <span className="text-circuit-green text-[11px]">
+                        Cover ready
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -705,7 +873,7 @@ export default function MemberDashboardClient({
                 ) : (
                   <>
                     <Plus className="w-4 h-4" />
-                    <span>Sync & Publish to Showcase</span>
+                    <span>Submit Project for Approval</span>
                   </>
                 )}
               </button>
@@ -714,7 +882,7 @@ export default function MemberDashboardClient({
 
           <div className="space-y-4">
             <div className="text-white font-semibold uppercase text-[11px]">
-              Your Linked Repositories ({projectList.length})
+              Your Submitted Repositories ({projectList.length})
             </div>
             {projectList.map((p) => (
               <div
@@ -722,10 +890,18 @@ export default function MemberDashboardClient({
                 className="p-5 rounded-lg bg-void-card border border-void-border flex flex-col sm:flex-row sm:items-center justify-between gap-4"
               >
                 <div>
-                  <div className="flex items-center gap-2 text-circuit-green mb-1">
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    <span className="font-semibold">{p.status}</span>
-                    <span className="text-slate-500">•</span>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                        p.status === "Verified & Active"
+                          ? "bg-circuit-green/20 text-circuit-green"
+                          : p.status === "Rejected"
+                          ? "bg-red-500/20 text-red-400"
+                          : "bg-yellow-500/20 text-yellow-400"
+                      }`}
+                    >
+                      {p.status.toUpperCase()}
+                    </span>
                     <span className="text-slate-400">★ {p.stars}</span>
                   </div>
                   <div className="font-serif text-base font-bold text-white font-sans">
@@ -746,12 +922,14 @@ export default function MemberDashboardClient({
                     <Github className="w-3.5 h-3.5 text-cyan-axon" />
                     <span>GitHub</span>
                   </a>
-                  <Link
-                    href={`/projects/${p.slug}`}
-                    className="px-3 py-1.5 bg-void-subtle border border-void-border hover:border-cyan-axon text-cyan-axon rounded"
-                  >
-                    View Listing
-                  </Link>
+                  {p.status === "Verified & Active" && (
+                    <Link
+                      href={`/projects/${p.slug}`}
+                      className="px-3 py-1.5 bg-void-subtle border border-void-border hover:border-cyan-axon text-cyan-axon rounded"
+                    >
+                      View Live Listing
+                    </Link>
+                  )}
                 </div>
               </div>
             ))}
@@ -759,7 +937,7 @@ export default function MemberDashboardClient({
         </div>
       )}
 
-      {/* Tab 4: Technical Blog Draft Submission (Blueprint 8.7) */}
+      {/* Tab 4: Technical Blog Draft Submission */}
       {activeTab === "blogs" && (
         <div className="space-y-8">
           <form
@@ -771,9 +949,18 @@ export default function MemberDashboardClient({
                 Submit Engineering Monograph / Article Draft
               </h2>
               <p className="text-slate-400 text-xs">
-                Supports Markdown headings (<code className="text-cyan-axon">###</code>) and fenced code blocks. Member submissions enter moderation in <code className="text-cyan-axon">/admin</code>.
+                Supports Markdown headings and fenced code blocks. All submissions
+                enter <strong className="text-yellow-400">Pending Review</strong>{" "}
+                for Super Admin publication approval.
               </p>
             </div>
+
+            {blogError && (
+              <div className="p-3 rounded bg-red-500/10 border border-red-500/40 text-red-400 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                <span>{blogError}</span>
+              </div>
+            )}
 
             {blogSuccess && (
               <div className="p-3 rounded bg-circuit-green/10 border border-circuit-green/40 text-circuit-green flex items-center gap-2">
@@ -831,7 +1018,7 @@ export default function MemberDashboardClient({
                 required
                 value={blogContent}
                 onChange={(e) => setBlogContent(e.target.value)}
-                placeholder="### Architecture Overview&#10;Write technical details and ```rust code blocks..."
+                placeholder="### Architecture Overview"
                 className="w-full bg-void-400 border border-void-border rounded px-4 py-3 text-white focus:outline-none focus:border-cyan-axon text-xs font-mono"
               />
             </div>
@@ -859,6 +1046,8 @@ export default function MemberDashboardClient({
                     className={`text-[10px] px-2 py-0.5 rounded font-bold ${
                       b.status === "Published"
                         ? "bg-circuit-green/20 text-circuit-green"
+                        : b.status === "Rejected"
+                        ? "bg-red-500/20 text-red-400"
                         : "bg-yellow-500/20 text-yellow-400"
                     }`}
                   >
@@ -910,7 +1099,8 @@ export default function MemberDashboardClient({
                     {cert.eventOrRole}
                   </div>
                   <div className="text-slate-400 text-[11px] mt-1">
-                    Issued: {cert.issueDate} // Authority: {cert.issuerAuthority}
+                    Issued: {cert.issueDate} {"//"} Authority:{" "}
+                    {cert.issuerAuthority}
                   </div>
                 </div>
 

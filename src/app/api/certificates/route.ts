@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { canAccessAdmin, getServerSession } from "@/lib/auth";
 import {
+  canAccessAdmin,
+  canUploadCertificateCsv,
+  getServerSession,
+  isSuperAdmin,
+} from "@/lib/auth";
+import {
+  appendAuditLog,
   issueCertificateRecord,
   readDb,
   toggleCertificateStatus,
 } from "@/lib/db";
-import type { VerifiedCertificate } from "@/lib/types";
+import { certificateCreateSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -35,38 +41,49 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const session = getServerSession();
-  if (!session || !canAccessAdmin(session.rbacRole)) {
+  if (!session || !canUploadCertificateCsv(session.rbacRole, session.wingId)) {
     return NextResponse.json(
-      { error: "Unauthorized: Wing Director or Super Admin required." },
+      {
+        error:
+          "Unauthorized: Only Technical Directorate leadership or Super Admin may issue credentials.",
+      },
       { status: 403 }
     );
   }
 
   try {
-    const body = (await req.json()) as {
-      recipientName?: string;
-      eventOrRole?: string;
-      memberId?: string;
-      type?: VerifiedCertificate["type"];
-    };
-
-    if (!body.recipientName?.trim() || !body.eventOrRole?.trim()) {
+    const raw = await req.json();
+    const parsed = certificateCreateSchema.safeParse(raw);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Recipient name and citation are required." },
+        {
+          error:
+            parsed.error.issues[0]?.message ||
+            "Recipient name and citation are required.",
+        },
         { status: 400 }
       );
     }
 
+    const d = parsed.data;
     const certificate = issueCertificateRecord({
-      recipientName: body.recipientName,
-      eventOrRole: body.eventOrRole,
-      memberId: body.memberId,
-      issuerAuthority:
-        session.rbacRole === "super_admin"
-          ? "AXON Executive Council & IMAC Directorate"
-          : `${session.wing} Directorate`,
-      type: body.type || "Technical Distinction",
+      recipientName: d.recipientName,
+      eventOrRole: d.eventOrRole,
+      memberId: d.memberId,
+      issueDate: d.issueDate,
+      certCode: d.certCode,
+      issuerAuthority: isSuperAdmin(session.rbacRole)
+        ? "AXON Executive Council & IMAC Directorate"
+        : "AXON Technical Directorate & Executive Council",
+      type: d.type || "Technical Distinction",
     });
+
+    appendAuditLog(
+      session.name,
+      session.rbacRole,
+      "CERTIFICATE_ISSUED",
+      `${certificate.certCode} -> ${certificate.recipientName}`
+    );
 
     return NextResponse.json({ certificate }, { status: 201 });
   } catch {
@@ -79,23 +96,30 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const session = getServerSession();
-  if (!session || !canAccessAdmin(session.rbacRole)) {
+  if (!session || !canUploadCertificateCsv(session.rbacRole, session.wingId)) {
     return NextResponse.json(
-      { error: "Unauthorized: Admin access required." },
+      {
+        error:
+          "Unauthorized: Technical Directorate leadership or Super Admin required.",
+      },
       { status: 403 }
     );
   }
 
   try {
     const body = (await req.json()) as { certCode?: string };
-    if (!body.certCode) {
+    if (!body.certCode?.trim()) {
       return NextResponse.json(
         { error: "Certificate code is required." },
         { status: 400 }
       );
     }
 
-    const updated = toggleCertificateStatus(body.certCode);
+    const updated = toggleCertificateStatus(
+      body.certCode,
+      session.name,
+      session.rbacRole
+    );
     if (!updated) {
       return NextResponse.json(
         { error: "Certificate not found." },

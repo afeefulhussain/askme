@@ -3,8 +3,10 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ArrowUpRight, Calendar, Github, Star } from "lucide-react";
-import { EVENTS, WINGS } from "@/data/axonData";
+import { WINGS } from "@/data/axonData";
 import { readDb } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
 
 interface PageProps {
   params: { slug: string };
@@ -22,7 +24,7 @@ export async function generateMetadata({
   return {
     title: wing.name,
     description: `${wing.tagline} ${wing.mandate}`,
-    alternates: { canonical: `https://axon.org.pk/wings/${wing.slug}` },
+    alternates: { canonical: `https://askme.pk/wings/${wing.slug}` },
   };
 }
 
@@ -34,7 +36,12 @@ export default function WingDetailPage({ params }: PageProps) {
   const wingProjects = db.projects.filter(
     (p) => p.wingId === wing.id && p.status === "Verified & Active"
   );
-  const wingEvents = EVENTS.filter((e) => e.wingId === wing.id);
+  const wingEvents = db.events.filter(
+    (e) =>
+      e.wingId === wing.id &&
+      e.status !== "Pending Approval" &&
+      e.status !== "Rejected"
+  );
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
@@ -81,6 +88,12 @@ export default function WingDetailPage({ params }: PageProps) {
             className="px-5 py-3 bg-void-card border border-void-border text-slate-200 hover:border-cyan-axon rounded transition-colors"
           >
             Director: {wing.lead} →
+          </Link>
+          <Link
+            href={`/u/${wing.coLeadUsername}`}
+            className="px-5 py-3 bg-void-card border border-void-border text-slate-200 hover:border-cyan-axon rounded transition-colors"
+          >
+            Co-Director: {wing.coLead} →
           </Link>
         </div>
       </div>

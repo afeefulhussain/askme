@@ -10,17 +10,21 @@ import {
   GitFork,
   CheckCircle2,
 } from "lucide-react";
-import { AXON_ORG_METADATA, WINGS, EVENTS } from "@/data/axonData";
+import { AXON_ORG_METADATA, WINGS } from "@/data/axonData";
 import { readDb } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 export default function HomePage() {
   const db = readDb();
-  const upcomingEvents = EVENTS.filter((e) => e.status !== "Completed").slice(
-    0,
-    2
-  );
+  const upcomingEvents = db.events
+    .filter(
+      (e) =>
+        e.status !== "Completed" &&
+        e.status !== "Pending Approval" &&
+        e.status !== "Rejected"
+    )
+    .slice(0, 2);
   const featuredProjects = db.projects
     .filter((p) => p.status === "Verified & Active")
     .slice(0, 3);
@@ -38,9 +42,9 @@ export default function HomePage() {
             <span>ORIGIN // IMAC, UET LAHORE</span>
           </span>
           <span className="text-slate-600">/</span>
-          <span className="text-slate-400">FOUNDING CHARTER 2026</span>
+          <span className="text-slate-400">TOGETHER WE TRANSMIT</span>
           <span className="text-slate-600">/</span>
-          <span className="text-cyan-axon">11 DIRECTORATE WINGS</span>
+          <span className="text-cyan-axon">11 SPECIALIZED WINGS</span>
         </div>
 
         <div className="max-w-4xl">
@@ -111,10 +115,10 @@ export default function HomePage() {
 
           <div className="border-l-2 border-void-border pl-4">
             <div className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-              {AXON_ORG_METADATA.metrics.eventsHosted}
+              {AXON_ORG_METADATA.metrics.totalAttendees}
             </div>
             <div className="text-[11px] text-slate-400 uppercase mt-0.5">
-              Technical Workshops Hosted
+              Total Workshop Attendees
             </div>
           </div>
 
@@ -276,7 +280,7 @@ export default function HomePage() {
                 <div className="flex items-center gap-2 text-slate-300">
                   <Calendar className="w-4 h-4 text-cyan-axon" />
                   <span>
-                    {evt.date} // {evt.time}
+                    {evt.date} {"//"} {evt.time}
                   </span>
                 </div>
                 <Link
@@ -419,10 +423,10 @@ export default function HomePage() {
               Search Certificate Registry
             </Link>
             <Link
-              href="/verify?code=AXN-2026-018"
+              href="/verify?code=AXN-26-313"
               className="px-6 py-3.5 bg-void-subtle border border-void-border text-slate-300 hover:text-white font-medium uppercase tracking-wider rounded transition-colors text-center"
             >
-              Test Audit (AXN-2026-018)
+              Test Audit (AXN-26-313)
             </Link>
           </div>
         </div>

@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   title: "Contact & Institutional Partnerships",
   description:
     "Official AXON channel for university chapter incubation, corporate sponsorships, technical speakers, and inquiries originating at IMAC UET Lahore.",
-  alternates: { canonical: "https://axon.org.pk/contact" },
+  alternates: { canonical: "https://askme.pk/contact" },
 };
 
 export default function ContactPage() {
@@ -60,15 +60,19 @@ export default function ContactPage() {
 
           <div className="p-6 rounded-xl bg-void-card border border-void-border space-y-3 font-sans text-xs text-slate-400">
             <div className="text-white font-mono font-semibold uppercase text-[11px] border-b border-void-border/60 pb-2">
-              Official Domains & Routing
+              Official Domain & Secretariat Routing
             </div>
             <p>
-              Primary Institutional Domain:{" "}
-              <strong className="text-slate-200 font-mono">axon.org.pk</strong>
+              Canonical Web Portal:{" "}
+              <strong className="text-slate-200 font-mono">
+                https://askme.pk
+              </strong>
             </p>
             <p>
-              Communications Gateway:{" "}
-              <strong className="text-slate-200 font-mono">askme.pk</strong>
+              Official Secretariat Dispatch:{" "}
+              <strong className="text-slate-200 font-mono">
+                axon@askme.pk
+              </strong>
             </p>
             <p className="text-[11px] text-slate-400">
               All official student credentials and certificates carry

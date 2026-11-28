@@ -1,11 +1,11 @@
 import { MetadataRoute } from "next";
-import { WINGS, EVENTS } from "@/data/axonData";
+import { WINGS } from "@/data/axonData";
 import { readDb } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = "https://axon.org.pk";
+  const baseUrl = "https://askme.pk";
   const db = readDb();
 
   const staticRoutes = [
@@ -33,12 +33,14 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.75,
   }));
 
-  const eventRoutes = EVENTS.map((e) => ({
-    url: `${baseUrl}/events/${e.slug}`,
-    lastModified: new Date(e.date),
-    changeFrequency: "weekly" as const,
-    priority: 0.7,
-  }));
+  const eventRoutes = db.events
+    .filter((e) => e.status !== "Pending Approval" && e.status !== "Rejected")
+    .map((e) => ({
+      url: `${baseUrl}/events/${e.slug}`,
+      lastModified: new Date(e.date),
+      changeFrequency: "weekly" as const,
+      priority: 0.7,
+    }));
 
   const blogRoutes = db.blogs
     .filter((b) => b.status === "Published")
@@ -59,7 +61,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     }));
 
   const memberRoutes = Object.values(db.members)
-    .filter((m) => m.isPublic && m.rbacRole !== "pending_applicant")
+    .filter((m) => m.isPublic && m.rbacRole !== "PENDING_APPLICANT")
     .map((m) => ({
       url: `${baseUrl}/u/${m.username}`,
       lastModified: new Date(),

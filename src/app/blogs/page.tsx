@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   title: "Engineering Insights & Publications",
   description:
     "Peer-reviewed engineering monographs, distributed systems research, and technical tutorials authored by AXON engineers at IMAC UET Lahore.",
-  alternates: { canonical: "https://axon.org.pk/blogs" },
+  alternates: { canonical: "https://askme.pk/blogs" },
 };
 
 export default function BlogsPage() {

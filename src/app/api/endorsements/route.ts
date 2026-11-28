@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { canAccessAdmin, getServerSession } from "@/lib/auth";
-import { addDirectorEndorsement, getMemberByUsername, readDb } from "@/lib/db";
+import {
+  addDirectorEndorsement,
+  appendAuditLog,
+  getMemberByUsername,
+  readDb,
+} from "@/lib/db";
+import { endorsementSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -23,26 +29,29 @@ export async function POST(req: NextRequest) {
   const session = getServerSession();
   if (!session || !canAccessAdmin(session.rbacRole)) {
     return NextResponse.json(
-      { error: "Only Wing Directors or Executive Council may award endorsements." },
+      {
+        error:
+          "Only Executive Council or Directorate leadership may award endorsements.",
+      },
       { status: 403 }
     );
   }
 
   try {
-    const body = (await req.json()) as {
-      recipientUsername?: string;
-      badgeTitle?: string;
-      note?: string;
-    };
-
-    if (!body.recipientUsername || !body.badgeTitle?.trim() || !body.note?.trim()) {
+    const raw = await req.json();
+    const parsed = endorsementSchema.safeParse(raw);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Recipient, badge title, and endorsement note are required." },
+        {
+          error:
+            parsed.error.issues[0]?.message ||
+            "Recipient, badge title, and note are required.",
+        },
         { status: 400 }
       );
     }
 
-    const recipient = getMemberByUsername(body.recipientUsername);
+    const recipient = getMemberByUsername(parsed.data.recipientUsername);
     if (!recipient) {
       return NextResponse.json(
         { error: "Target member not found." },
@@ -50,15 +59,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const director = getMemberByUsername(session.username);
+    const issuer = getMemberByUsername(session.username);
     const endorsement = addDirectorEndorsement({
       recipientUsername: recipient.username,
       directorName: session.name,
-      directorRole: director?.role || "Directorate Lead",
+      directorRole: issuer?.designation || "Directorate Lead",
       wingId: session.wingId,
-      badgeTitle: body.badgeTitle,
-      note: body.note,
+      badgeTitle: parsed.data.badgeTitle,
+      note: parsed.data.note,
     });
+
+    appendAuditLog(
+      session.name,
+      session.rbacRole,
+      "ENDORSEMENT_AWARDED",
+      `${recipient.name}: ${parsed.data.badgeTitle}`
+    );
 
     return NextResponse.json({ endorsement }, { status: 201 });
   } catch {

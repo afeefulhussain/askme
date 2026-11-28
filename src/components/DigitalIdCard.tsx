@@ -24,7 +24,7 @@ export default function DigitalIdCard({ member }: DigitalIdCardProps) {
   const verifyUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}/verify?code=${encodeURIComponent(member.memberId)}`
-      : `https://axon.org.pk/verify?code=${encodeURIComponent(member.memberId)}`;
+      : `https://askme.pk/verify?code=${encodeURIComponent(member.memberId)}`;
 
   const handleExportPng = async () => {
     setDownloading(true);
@@ -117,7 +117,7 @@ export default function DigitalIdCard({ member }: DigitalIdCardProps) {
       ctx.fillText("ROLE:", 300, 304);
       ctx.fillStyle = "#00F0FF";
       ctx.font = "bold 20px monospace";
-      ctx.fillText(member.role, 360, 304);
+      ctx.fillText(member.designation, 360, 304);
 
       ctx.fillStyle = "#94A3B8";
       ctx.font = "15px monospace";
@@ -188,15 +188,19 @@ export default function DigitalIdCard({ member }: DigitalIdCardProps) {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-void-border/70 pb-4 mb-5">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded bg-void-500 border border-void-border flex items-center justify-center font-mono font-bold text-cyan-axon shadow-inner">
-              AX
+            <div className="w-9 h-9 rounded bg-void-500 border border-void-border flex items-center justify-center p-1 shadow-inner">
+              <img
+                src="/assets/axon-mark.svg"
+                alt="AXON"
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <div className="font-serif font-bold text-base tracking-tight text-white">
                 AXON NETWORK
               </div>
               <div className="text-[9px] font-mono tracking-widest text-slate-400 uppercase">
-                INSTITUTIONAL MEMBER CREDENTIAL
+                TOGETHER WE TRANSMIT // IMAC-01
               </div>
             </div>
           </div>
@@ -238,7 +242,7 @@ export default function DigitalIdCard({ member }: DigitalIdCardProps) {
               <div>
                 <span className="text-slate-400 text-[10px]">ROLE: </span>
                 <span className="text-cyan-axon font-semibold">
-                  {member.role}
+                  {member.designation}
                 </span>
               </div>
               <div>

@@ -9,6 +9,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/admin", "/dashboard", "/login"],
       },
     ],
-    sitemap: "https://axon.org.pk/sitemap.xml",
+    sitemap: "https://askme.pk/sitemap.xml",
   };
 }

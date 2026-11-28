@@ -18,18 +18,22 @@ export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   const db = readDb();
-  const post = db.blogs.find((b) => b.slug === params.slug);
+  const post = db.blogs.find(
+    (b) => b.slug === params.slug && b.status === "Published"
+  );
   if (!post) return { title: "Article Not Found" };
   return {
     title: post.title,
     description: post.summary,
-    alternates: { canonical: `https://axon.org.pk/blogs/${post.slug}` },
+    alternates: { canonical: `https://askme.pk/blogs/${post.slug}` },
   };
 }
 
 export default function BlogDetailPage({ params }: PageProps) {
   const db = readDb();
-  const post = db.blogs.find((b) => b.slug === params.slug);
+  const post = db.blogs.find(
+    (b) => b.slug === params.slug && b.status === "Published"
+  );
 
   if (!post) {
     notFound();

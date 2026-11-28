@@ -117,7 +117,7 @@ export default function EventsDirectoryClient({
                   <div className="flex items-center gap-2">
                     <Calendar className="w-3.5 h-3.5 text-cyan-axon" />
                     <span>
-                      {evt.date} // {evt.time}
+                      {evt.date} {"//"} {evt.time}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-[11px]">

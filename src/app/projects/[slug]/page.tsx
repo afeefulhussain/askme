@@ -24,18 +24,22 @@ export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   const db = readDb();
-  const project = db.projects.find((p) => p.slug === params.slug);
+  const project = db.projects.find(
+    (p) => p.slug === params.slug && p.status === "Verified & Active"
+  );
   if (!project) return { title: "Project Not Found" };
   return {
     title: project.title,
     description: project.summary,
-    alternates: { canonical: `https://axon.org.pk/projects/${project.slug}` },
+    alternates: { canonical: `https://askme.pk/projects/${project.slug}` },
   };
 }
 
 export default function ProjectDetailPage({ params }: PageProps) {
   const db = readDb();
-  const project = db.projects.find((p) => p.slug === params.slug);
+  const project = db.projects.find(
+    (p) => p.slug === params.slug && p.status === "Verified & Active"
+  );
 
   if (!project) {
     notFound();

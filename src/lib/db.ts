@@ -3,32 +3,40 @@ import path from "path";
 import crypto from "crypto";
 import type {
   AxonDatabaseState,
+  AxonEvent,
   AxonMember,
   BlogPost,
   ContactInquiry,
   Endorsement,
   EventRsvp,
   MembershipApplication,
+  PortalRole,
   PortfolioTheme,
   Project,
-  RbacRole,
   VerifiedCertificate,
+  WingTask,
 } from "@/lib/types";
 import {
   BLOGS,
   CERTIFICATES_DATABASE,
+  EVENTS,
   INITIAL_APPLICATIONS,
+  INITIAL_AUDIT_LOGS,
   INITIAL_ENDORSEMENTS,
+  INITIAL_FINANCE_RECORDS,
   INITIAL_INQUIRIES,
   INITIAL_RSVPS,
+  INITIAL_WING_TASKS,
   MEMBERS_PORTFOLIOS,
   PROJECTS,
   WINGS,
 } from "@/data/axonData";
+import { getSupabaseAdmin } from "@/lib/supabase";
 
 function createSeedState(): AxonDatabaseState {
   return {
     members: structuredClone(MEMBERS_PORTFOLIOS),
+    events: structuredClone(EVENTS),
     projects: structuredClone(PROJECTS),
     blogs: structuredClone(BLOGS),
     certificates: structuredClone(CERTIFICATES_DATABASE),
@@ -36,6 +44,10 @@ function createSeedState(): AxonDatabaseState {
     rsvps: structuredClone(INITIAL_RSVPS),
     endorsements: structuredClone(INITIAL_ENDORSEMENTS),
     inquiries: structuredClone(INITIAL_INQUIRIES),
+    wingTasks: structuredClone(INITIAL_WING_TASKS),
+    financeRecords: structuredClone(INITIAL_FINANCE_RECORDS),
+    auditLogs: structuredClone(INITIAL_AUDIT_LOGS),
+    otpChallenges: {},
   };
 }
 
@@ -59,13 +71,13 @@ export function readDb(): AxonDatabaseState {
     if (fs.existsSync(dbPath)) {
       const raw = fs.readFileSync(dbPath, "utf8");
       const parsed = JSON.parse(raw) as AxonDatabaseState;
-      if (parsed && parsed.members && parsed.certificates) {
+      if (parsed && parsed.members && parsed.certificates && parsed.events) {
         memoryCache = parsed;
         return memoryCache;
       }
     }
   } catch {
-    // Fallback to seed state if corrupted or unreadable
+    // Fallback to seed state
   }
 
   memoryCache = createSeedState();
@@ -79,7 +91,7 @@ export function writeDb(state: AxonDatabaseState): void {
   try {
     fs.writeFileSync(dbPath, JSON.stringify(state, null, 2), "utf8");
   } catch {
-    // Ignore write failure on strictly read-only environments; memoryCache remains active
+    // Ignore write failure on strictly read-only environments
   }
 }
 
@@ -97,23 +109,73 @@ export function computeAuditHash(seed: string): string {
   return `0x${digest}`;
 }
 
+export function appendAuditLog(
+  actorName: string,
+  actorRole: PortalRole,
+  action: string,
+  target: string
+): void {
+  const db = readDb();
+  db.auditLogs.unshift({
+    id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    actorName,
+    actorRole,
+    action,
+    target,
+    timestamp: new Date().toISOString(),
+  });
+  if (db.auditLogs.length > 100) {
+    db.auditLogs = db.auditLogs.slice(0, 100);
+  }
+  writeDb(db);
+}
+
+// OTP Management
+export function saveOtpChallenge(email: string, codeHash: string): void {
+  const db = readDb();
+  const key = email.trim().toLowerCase();
+  db.otpChallenges[key] = {
+    email: key,
+    codeHash,
+    expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+    attempts: 0,
+  };
+  writeDb(db);
+}
+
+export function getOtpChallenge(email: string) {
+  const db = readDb();
+  return db.otpChallenges[email.trim().toLowerCase()] || null;
+}
+
+export function incrementOtpAttempts(email: string): void {
+  const db = readDb();
+  const key = email.trim().toLowerCase();
+  if (db.otpChallenges[key]) {
+    db.otpChallenges[key].attempts += 1;
+    writeDb(db);
+  }
+}
+
+export function clearOtpChallenge(email: string): void {
+  const db = readDb();
+  delete db.otpChallenges[email.trim().toLowerCase()];
+  writeDb(db);
+}
+
 export function getPublicMembers(): AxonMember[] {
   const db = readDb();
   return Object.values(db.members).filter(
-    (m) => m.isPublic && m.rbacRole !== "pending_applicant"
+    (m) => m.isPublic && m.rbacRole !== "PENDING_APPLICANT"
   );
 }
 
 export function getMemberByUsername(username: string): AxonMember | null {
   const db = readDb();
-  const key = username.toLowerCase();
-  return db.members[key] || null;
+  return db.members[username.toLowerCase()] || null;
 }
 
-export function findMemberByEmailOrRole(
-  email: string,
-  requestedTier?: string
-): AxonMember | null {
+export function findMemberByEmail(email: string): AxonMember | null {
   const db = readDb();
   const cleanEmail = email.trim().toLowerCase();
 
@@ -122,7 +184,6 @@ export function findMemberByEmailOrRole(
   );
   if (existing) return existing;
 
-  // Check pending applications by email
   const pendingApp = db.applications.find(
     (a) => a.email.toLowerCase() === cleanEmail
   );
@@ -133,52 +194,24 @@ export function findMemberByEmailOrRole(
       name: pendingApp.name,
       headline: `${pendingApp.roleType} Candidate`,
       memberId: "PENDING-REVIEW",
-      role: "Pending Applicant",
-      rbacRole: "pending_applicant",
+      designation: "Applicant",
+      category: "Member",
+      supervisedWings: [],
+      rbacRole: "PENDING_APPLICANT",
       wing: wingObj?.name || pendingApp.preferredWing,
       wingId: pendingApp.preferredWing,
       chapter: pendingApp.university,
       status: "Pending Review",
-      avatar: "/assets/avatars/default.svg",
-      bio: pendingApp.statement || "Application awaiting Executive Council review.",
-      github: `https://github.com/${pendingApp.githubUsername}`,
+      avatar: `/api/avatar?name=${encodeURIComponent(pendingApp.name)}&id=PENDING`,
+      bio:
+        pendingApp.statement ||
+        "Application awaiting Executive Council review.",
+      github: pendingApp.githubUsername
+        ? `https://github.com/${pendingApp.githubUsername}`
+        : "",
       githubUsername: pendingApp.githubUsername,
       linkedin: "",
       email: pendingApp.email,
-      graduationYear: 2027,
-      internshipAvailable: false,
-      themePreference: "obsidian-cyan",
-      isPublic: false,
-      portfolioViews: 0,
-      education: [],
-      skills: { languages: [], frameworks: [], systems: [] },
-      timeline: [],
-    };
-  }
-
-  // Fallback for instant demo authentication tiers
-  if (requestedTier === "super_admin") return db.members["irfan"];
-  if (requestedTier === "wing_director") return db.members["talha"];
-  if (requestedTier === "approved_member") return db.members["mahnoor"];
-  if (requestedTier === "pending_applicant") {
-    const firstPending = db.applications.find((a) => a.status === "Pending");
-    return {
-      username: "pending_candidate",
-      name: firstPending?.name || "Daniyal Tariq",
-      headline: "Prospective Member Engineer",
-      memberId: "PENDING-REVIEW",
-      role: "Pending Applicant",
-      rbacRole: "pending_applicant",
-      wing: "Systems & Cloud Infrastructure",
-      wingId: firstPending?.preferredWing || "systems-infra",
-      chapter: firstPending?.university || "UET Lahore",
-      status: "Pending Review",
-      avatar: "/assets/avatars/default.svg",
-      bio: "Application awaiting review by Directorate Lead.",
-      github: "https://github.com/daniyal-tariq",
-      githubUsername: "daniyal-tariq",
-      linkedin: "",
-      email: cleanEmail || firstPending?.email || "applicant@uet.edu.pk",
       graduationYear: 2027,
       internshipAvailable: false,
       themePreference: "obsidian-cyan",
@@ -215,7 +248,7 @@ export function createApplication(input: {
     university: input.university.trim(),
     roleType: input.roleType,
     preferredWing: input.preferredWing,
-    githubUsername: cleanGithub || "student-dev",
+    githubUsername: cleanGithub || "axon-builder",
     statement: input.statement.trim(),
     status: "Pending",
     submittedAt: new Date().toISOString().split("T")[0],
@@ -223,6 +256,26 @@ export function createApplication(input: {
 
   db.applications.unshift(app);
   writeDb(db);
+
+  // Best-effort sync to Supabase when configured
+  const sb = getSupabaseAdmin();
+  if (sb) {
+    void sb
+      .from("applications")
+      .insert({
+        id: app.id,
+        name: app.name,
+        email: app.email,
+        university: app.university,
+        role_type: app.roleType,
+        preferred_wing: app.preferredWing,
+        github_username: app.githubUsername,
+        statement: app.statement,
+        status: "pending",
+      })
+      .then(() => {}, () => {});
+  }
+
   return app;
 }
 
@@ -230,7 +283,9 @@ export function reviewApplication(input: {
   id: string;
   decision: "Approved" | "Rejected";
   assignedWing?: string;
-  assignedRole?: RbacRole;
+  assignedRole?: PortalRole;
+  actorName?: string;
+  actorRole?: PortalRole;
 }): MembershipApplication | null {
   const db = readDb();
   const app = db.applications.find((a) => a.id === input.id);
@@ -243,12 +298,14 @@ export function reviewApplication(input: {
   }
 
   if (input.decision === "Approved") {
-    const role: RbacRole = input.assignedRole || "approved_member";
+    const role: PortalRole = input.assignedRole || "APPROVED_MEMBER";
     app.assignedRole = role;
 
-    const seq = Object.keys(db.members).length + 60;
-    const memberId = `AXN-2026-${String(seq).padStart(3, "0")}`;
-    let baseUsername = slugify(app.name.split(" ")[0] || app.name) || `member${seq}`;
+    // Member ID Format: AXN-26-XXX (Section D.3)
+    const seq = 350 + Object.keys(db.members).length;
+    const memberId = `AXN-26-${String(seq).padStart(3, "0")}`;
+    let baseUsername =
+      slugify(app.name.split(" ")[0] || app.name) || `member${seq}`;
     if (db.members[baseUsername]) {
       baseUsername = `${baseUsername}-${seq}`;
     }
@@ -264,29 +321,37 @@ export function reviewApplication(input: {
       name: app.name,
       headline: `${app.roleType} — ${wingName}`,
       memberId,
-      role:
-        role === "wing_director"
-          ? `Director — ${wingName}`
-          : role === "super_admin"
-          ? "Executive Council Member"
-          : app.roleType,
+      designation:
+        role === "DIRECTOR"
+          ? "Director"
+          : role === "CO_DIRECTOR"
+          ? "Co-Director"
+          : role === "CORE_LEAD"
+          ? "Core Lead"
+          : "Member Engineer",
+      category:
+        role === "DIRECTOR" || role === "CO_DIRECTOR" ? "Directorate" : "Member",
+      supervisedWings: role === "CORE_LEAD" ? [app.preferredWing] : [],
+      reportsTo: wingObj?.reportsTo,
       rbacRole: role,
       wing: wingName,
       wingId: app.preferredWing,
       chapter: app.university,
       status:
-        role === "super_admin"
+        role === "SUPER_ADMIN"
           ? "Executive Council"
-          : role === "wing_director"
-          ? "Wing Director"
+          : role === "DIRECTOR"
+          ? "Director"
+          : role === "CO_DIRECTOR"
+          ? "Co-Director"
           : "Active Member",
-      avatar: "/assets/avatars/default.svg",
+      avatar: `/api/avatar?name=${encodeURIComponent(app.name)}&id=${encodeURIComponent(memberId)}`,
       bio:
         app.statement ||
-        `Inducted member of AXON ${wingName} from ${app.university}.`,
+        `Inducted member of AXON ${wingName} (${app.university}).`,
       github: `https://github.com/${app.githubUsername}`,
       githubUsername: app.githubUsername,
-      linkedin: "https://linkedin.com",
+      linkedin: "",
       email: app.email,
       graduationYear: 2027,
       internshipAvailable: true,
@@ -295,7 +360,7 @@ export function reviewApplication(input: {
       portfolioViews: 1,
       education: [
         {
-          degree: "B.Sc. Engineering / Computing",
+          degree: "B.Sc. Engineering & Technology",
           institution: app.university,
           period: "2023 – 2027",
         },
@@ -303,26 +368,25 @@ export function reviewApplication(input: {
       skills: {
         languages: ["TypeScript", "Python", "C++"],
         frameworks: ["Next.js", "React"],
-        systems: ["Git", "Linux", "Docker"],
+        systems: ["Git", "Linux", "PostgreSQL"],
       },
       timeline: [
         {
           year: "2026 - Present",
           role: app.roleType,
           organization: `AXON (${wingName})`,
-          description: `Inducted into AXON network (${app.university} Chapter).`,
+          description: `Inducted into AXON network (${app.university}).`,
         },
       ],
     };
 
     db.members[baseUsername] = newMember;
 
-    // Auto-issue official induction certificate
     const cert: VerifiedCertificate = {
       certCode: memberId,
       recipientName: app.name,
       memberId,
-      eventOrRole: `${newMember.role} — ${wingName}`,
+      eventOrRole: `${app.roleType} — ${wingName} Directorate`,
       issueDate: app.reviewedAt,
       issuerAuthority: "AXON Executive Council & IMAC Directorate",
       status: "Active",
@@ -333,9 +397,20 @@ export function reviewApplication(input: {
   }
 
   writeDb(db);
+
+  if (input.actorName && input.actorRole) {
+    appendAuditLog(
+      input.actorName,
+      input.actorRole,
+      `APPLICATION_${input.decision.toUpperCase()}`,
+      `${app.name} (${app.generatedMemberId || app.id})`
+    );
+  }
+
   return app;
 }
 
+// Strict Section D.3 Policy: ALL member projects start as "Under Review" and require SUPER_ADMIN approval!
 export function createProjectRecord(
   member: AxonMember,
   input: {
@@ -344,6 +419,7 @@ export function createProjectRecord(
     architecture: string;
     githubRepo: string;
     liveDemoUrl?: string;
+    coverImage?: string;
     techStack: string[];
     stars: number;
     forks: number;
@@ -354,7 +430,9 @@ export function createProjectRecord(
   const db = readDb();
   const baseSlug = slugify(input.title) || `project-${Date.now()}`;
   const exists = db.projects.some((p) => p.slug === baseSlug);
-  const slug = exists ? `${baseSlug}-${Date.now().toString().slice(-4)}` : baseSlug;
+  const slug = exists
+    ? `${baseSlug}-${Date.now().toString().slice(-4)}`
+    : baseSlug;
 
   const project: Project = {
     id: `proj-${Date.now()}`,
@@ -372,12 +450,13 @@ export function createProjectRecord(
     techStack: input.techStack,
     githubRepo: input.githubRepo,
     liveDemoUrl: input.liveDemoUrl || undefined,
+    coverImage: input.coverImage || undefined,
     stars: input.stars,
     forks: input.forks,
     primaryLanguage: input.primaryLanguage,
     lastSyncedAt: new Date().toISOString().split("T")[0],
     wingId: input.wingId || member.wingId,
-    status: "Verified & Active",
+    status: "Under Review",
   };
 
   db.projects.unshift(project);
@@ -387,16 +466,27 @@ export function createProjectRecord(
 
 export function moderateProjectRecord(
   id: string,
-  status: Project["status"]
+  status: Project["status"],
+  actorName?: string,
+  actorRole?: PortalRole
 ): Project | null {
   const db = readDb();
   const proj = db.projects.find((p) => p.id === id);
   if (!proj) return null;
   proj.status = status;
   writeDb(db);
+  if (actorName && actorRole) {
+    appendAuditLog(
+      actorName,
+      actorRole,
+      `PROJECT_${status.toUpperCase().replace(/\s+/g, "_")}`,
+      proj.title
+    );
+  }
   return proj;
 }
 
+// Strict Section D.3 Policy: ALL member blogs start as "Pending Review" and require SUPER_ADMIN approval!
 export function createBlogDraft(
   member: AxonMember,
   input: {
@@ -409,7 +499,9 @@ export function createBlogDraft(
   const db = readDb();
   const baseSlug = slugify(input.title) || `article-${Date.now()}`;
   const exists = db.blogs.some((b) => b.slug === baseSlug);
-  const slug = exists ? `${baseSlug}-${Date.now().toString().slice(-4)}` : baseSlug;
+  const slug = exists
+    ? `${baseSlug}-${Date.now().toString().slice(-4)}`
+    : baseSlug;
 
   const wordCount = input.content.trim().split(/\s+/).length;
   const readTime = `${Math.max(2, Math.ceil(wordCount / 180))} min read`;
@@ -421,7 +513,7 @@ export function createBlogDraft(
     author: {
       name: member.name,
       username: member.username,
-      role: `${member.role}, AXON`,
+      role: `${member.designation}, AXON`,
     },
     wingId: member.wingId,
     publishedAt: new Date().toISOString().split("T")[0],
@@ -429,10 +521,7 @@ export function createBlogDraft(
     tags: input.tags.length > 0 ? input.tags : ["Engineering", "AXON"],
     summary: input.summary.trim(),
     content: input.content.trim(),
-    status:
-      member.rbacRole === "super_admin" || member.rbacRole === "wing_director"
-        ? "Published"
-        : "Pending Review",
+    status: "Pending Review",
   };
 
   db.blogs.unshift(post);
@@ -442,7 +531,9 @@ export function createBlogDraft(
 
 export function moderateBlogRecord(
   id: string,
-  status: BlogPost["status"]
+  status: BlogPost["status"],
+  actorName?: string,
+  actorRole?: PortalRole
 ): BlogPost | null {
   const db = readDb();
   const blog = db.blogs.find((b) => b.id === id);
@@ -452,21 +543,109 @@ export function moderateBlogRecord(
     blog.publishedAt = new Date().toISOString().split("T")[0];
   }
   writeDb(db);
+  if (actorName && actorRole) {
+    appendAuditLog(
+      actorName,
+      actorRole,
+      `BLOG_${status.toUpperCase().replace(/\s+/g, "_")}`,
+      blog.title
+    );
+  }
   return blog;
+}
+
+// Events Workflow (Section C.3): Core Team creates/submits -> Super Admin approves!
+export function createEventProposal(
+  submittedBy: string,
+  input: {
+    title: string;
+    category: AxonEvent["category"];
+    date: string;
+    time: string;
+    location: string;
+    isVirtual: boolean;
+    wingId: string;
+    capacity: number;
+    speakerName: string;
+    speakerTitle: string;
+    speakerOrg: string;
+    description: string;
+    curriculum: string[];
+  },
+  autoPublish = false
+): AxonEvent {
+  const db = readDb();
+  const baseSlug = slugify(input.title) || `event-${Date.now()}`;
+  const exists = db.events.some((e) => e.slug === baseSlug);
+  const slug = exists ? `${baseSlug}-${Date.now().toString().slice(-4)}` : baseSlug;
+
+  const evt: AxonEvent = {
+    id: `evt-${Date.now()}`,
+    slug,
+    title: input.title,
+    category: input.category,
+    date: input.date,
+    time: input.time,
+    location: input.location,
+    isVirtual: input.isVirtual,
+    status: autoPublish ? "Registrations Open" : "Pending Approval",
+    wingId: input.wingId,
+    capacity: input.capacity,
+    attendeeCount: 0,
+    submittedBy,
+    speaker: {
+      name: input.speakerName,
+      title: input.speakerTitle,
+      organization: input.speakerOrg,
+    },
+    description: input.description,
+    curriculum: input.curriculum,
+    registrationUrl: `/events/${slug}`,
+  };
+
+  db.events.unshift(evt);
+  writeDb(db);
+  return evt;
+}
+
+export function moderateEventRecord(
+  id: string,
+  status: AxonEvent["status"],
+  actorName?: string,
+  actorRole?: PortalRole
+): AxonEvent | null {
+  const db = readDb();
+  const evt = db.events.find((e) => e.id === id);
+  if (!evt) return null;
+  evt.status = status;
+  writeDb(db);
+  if (actorName && actorRole) {
+    appendAuditLog(
+      actorName,
+      actorRole,
+      `EVENT_${status.toUpperCase().replace(/\s+/g, "_")}`,
+      evt.title
+    );
+  }
+  return evt;
 }
 
 export function issueCertificateRecord(input: {
   recipientName: string;
   eventOrRole: string;
   memberId?: string;
+  issueDate?: string;
+  certCode?: string;
   issuerAuthority?: string;
   type?: VerifiedCertificate["type"];
 }): VerifiedCertificate {
   const db = readDb();
-  const certCode = `AXN-CERT-${Math.floor(1000 + Math.random() * 8999)}`;
-  const issueDate = new Date().toISOString().split("T")[0];
+  const certCode =
+    input.certCode?.trim().toUpperCase() ||
+    `AXN-CERT-${Math.floor(1000 + Math.random() * 8999)}`;
+  const issueDate =
+    input.issueDate?.trim() || new Date().toISOString().split("T")[0];
 
-  // Auto-link memberId if recipient matches a member name and memberId wasn't passed
   let linkedMemberId = input.memberId?.trim() || undefined;
   if (!linkedMemberId) {
     const matchedMember = Object.values(db.members).find(
@@ -489,13 +668,58 @@ export function issueCertificateRecord(input: {
     hash: computeAuditHash(`${certCode}:${input.recipientName}:${issueDate}`),
   };
 
-  db.certificates.unshift(cert);
+  // Upsert by certCode
+  const existingIdx = db.certificates.findIndex(
+    (c) => c.certCode.toUpperCase() === certCode
+  );
+  if (existingIdx >= 0) {
+    db.certificates[existingIdx] = cert;
+  } else {
+    db.certificates.unshift(cert);
+  }
   writeDb(db);
   return cert;
 }
 
+export function bulkIssueCertificates(
+  rows: Array<{
+    recipientName: string;
+    eventOrRole: string;
+    issueDate?: string;
+    certCode?: string;
+    memberId?: string;
+    type?: VerifiedCertificate["type"];
+  }>,
+  actorName: string,
+  actorRole: PortalRole
+): VerifiedCertificate[] {
+  const issued: VerifiedCertificate[] = [];
+  for (const row of rows) {
+    issued.push(
+      issueCertificateRecord({
+        recipientName: row.recipientName,
+        eventOrRole: row.eventOrRole,
+        issueDate: row.issueDate,
+        certCode: row.certCode,
+        memberId: row.memberId,
+        type: row.type || "Event Attendance",
+        issuerAuthority: "AXON Technical Directorate & Executive Council",
+      })
+    );
+  }
+  appendAuditLog(
+    actorName,
+    actorRole,
+    "BULK_CERTIFICATE_CSV_UPLOAD",
+    `Uploaded ${issued.length} verified certificate records`
+  );
+  return issued;
+}
+
 export function toggleCertificateStatus(
-  certCode: string
+  certCode: string,
+  actorName?: string,
+  actorRole?: PortalRole
 ): VerifiedCertificate | null {
   const db = readDb();
   const cert = db.certificates.find(
@@ -504,6 +728,14 @@ export function toggleCertificateStatus(
   if (!cert) return null;
   cert.status = cert.status === "Active" ? "Revoked" : "Active";
   writeDb(db);
+  if (actorName && actorRole) {
+    appendAuditLog(
+      actorName,
+      actorRole,
+      `CERTIFICATE_${cert.status.toUpperCase()}`,
+      cert.certCode
+    );
+  }
   return cert;
 }
 
@@ -512,6 +744,7 @@ export function verifyCredentialQuery(query: string): VerifiedCertificate | null
   const code = query.trim().toUpperCase();
   if (!code) return null;
 
+  // Match by serial ID, member ID, or recipient name (Section C.3)
   const cert = db.certificates.find(
     (c) =>
       c.certCode.toUpperCase() === code ||
@@ -520,7 +753,6 @@ export function verifyCredentialQuery(query: string): VerifiedCertificate | null
   );
   if (cert) return cert;
 
-  // Fallback check against active members
   const member = Object.values(db.members).find(
     (m) =>
       m.memberId.toUpperCase() === code ||
@@ -528,14 +760,14 @@ export function verifyCredentialQuery(query: string): VerifiedCertificate | null
       m.name.toUpperCase().includes(code)
   );
 
-  if (member && member.rbacRole !== "pending_applicant") {
+  if (member && member.rbacRole !== "PENDING_APPLICANT") {
     return {
       certCode: member.memberId,
       recipientName: member.name,
       memberId: member.memberId,
-      eventOrRole: `${member.role} — ${member.wing}`,
+      eventOrRole: `${member.designation} — ${member.wing}`,
       issueDate: "2026-10-01",
-      issuerAuthority: `AXON Umbrella Organization (${member.chapter})`,
+      issuerAuthority: `AXON Independent Organization (${member.chapter})`,
       status: "Active",
       type: "Leadership Appointment",
       hash: computeAuditHash(`${member.memberId}:${member.name}`),
@@ -552,6 +784,8 @@ export function updateMemberPortfolio(
     bio?: string;
     githubUsername?: string;
     linkedin?: string;
+    avatar?: string;
+    resumeUrl?: string;
     graduationYear?: number;
     internshipAvailable?: boolean;
     themePreference?: PortfolioTheme;
@@ -572,9 +806,11 @@ export function updateMemberPortfolio(
   if (patch.githubUsername !== undefined) {
     const clean = patch.githubUsername.replace(/^@/, "").trim();
     member.githubUsername = clean;
-    member.github = `https://github.com/${clean}`;
+    member.github = clean ? `https://github.com/${clean}` : "";
   }
   if (patch.linkedin !== undefined) member.linkedin = patch.linkedin.trim();
+  if (patch.avatar !== undefined) member.avatar = patch.avatar.trim();
+  if (patch.resumeUrl !== undefined) member.resumeUrl = patch.resumeUrl.trim();
   if (patch.graduationYear !== undefined)
     member.graduationYear = patch.graduationYear;
   if (patch.internshipAvailable !== undefined)
@@ -618,6 +854,8 @@ export function createEventRsvpRecord(input: {
   };
 
   db.rsvps.unshift(rsvp);
+  const evt = db.events.find((e) => e.slug === input.eventSlug);
+  if (evt) evt.attendeeCount += 1;
   writeDb(db);
   return { rsvp, alreadyRegistered: false };
 }
@@ -644,6 +882,28 @@ export function addDirectorEndorsement(input: {
   db.endorsements.unshift(endorsement);
   writeDb(db);
   return endorsement;
+}
+
+export function createWingTaskRecord(input: {
+  wingId: string;
+  title: string;
+  ownerName: string;
+  ownerRole: string;
+  dueDate: string;
+}): WingTask {
+  const db = readDb();
+  const task: WingTask = {
+    id: `task-${Date.now()}`,
+    wingId: input.wingId,
+    title: input.title,
+    ownerName: input.ownerName,
+    ownerRole: input.ownerRole,
+    status: "Planned",
+    dueDate: input.dueDate,
+  };
+  db.wingTasks.unshift(task);
+  writeDb(db);
+  return task;
 }
 
 export function createInquiryRecord(input: {

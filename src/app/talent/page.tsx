@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Member Directory & Talent Discovery",
   description:
-    "Recruiter-facing directory of vetted AXON student engineers, wing directors, and researchers filterable by skill stack, graduation year, and internship availability.",
-  alternates: { canonical: "https://axon.org.pk/talent" },
+    "Open recruiter-facing directory of vetted AXON student engineers, wing directors, and researchers filterable by skill stack, graduation year, and internship availability.",
+  alternates: { canonical: "https://askme.pk/talent" },
 };
 
 export default function TalentPage() {

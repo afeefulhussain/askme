@@ -1,16 +1,23 @@
 import React from "react";
 import type { Metadata } from "next";
-import { EVENTS } from "@/data/axonData";
+import { readDb } from "@/lib/db";
 import EventsDirectoryClient from "@/components/EventsDirectoryClient";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Events, Webinars & Workshops",
   description:
     "Filterable directory of AXON technical workshops, bootcamps, webinars, and engineering symposia hosted at IMAC UET Lahore and online.",
-  alternates: { canonical: "https://axon.org.pk/events" },
+  alternates: { canonical: "https://askme.pk/events" },
 };
 
 export default function EventsPage() {
+  const db = readDb();
+  const publicEvents = db.events.filter(
+    (e) => e.status !== "Pending Approval" && e.status !== "Rejected"
+  );
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
       <div className="max-w-4xl border-b border-void-border pb-12 mb-10">
@@ -27,7 +34,7 @@ export default function EventsPage() {
         </p>
       </div>
 
-      <EventsDirectoryClient events={EVENTS} />
+      <EventsDirectoryClient events={publicEvents} />
     </div>
   );
 }

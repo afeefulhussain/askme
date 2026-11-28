@@ -7,8 +7,8 @@ import { WINGS } from "@/data/axonData";
 export const metadata: Metadata = {
   title: "11 Directorates & Operational Wings",
   description:
-    "Explore AXON's 11 specialized technical wings, research directorates, active student initiatives, and future spin-off wings originating at IMAC UET Lahore.",
-  alternates: { canonical: "https://axon.org.pk/wings" },
+    "Explore AXON's 11 specialized technical and operational wings, their Directors and Co-Directors, and active student initiatives originating at IMAC, UET Lahore.",
+  alternates: { canonical: "https://askme.pk/wings" },
 };
 
 export default function WingsPage() {
@@ -77,23 +77,36 @@ export default function WingsPage() {
                 </p>
               </div>
 
-              <Link
-                href={`/u/${wing.leadUsername}`}
-                className="p-4 rounded bg-void-subtle border border-void-border hover:border-cyan-axon/50 font-mono text-xs shrink-0 w-full lg:w-64 transition-colors"
-              >
-                <div className="text-[10px] text-slate-400 uppercase">
-                  DIRECTORATE HEAD
+              <div className="p-4 rounded bg-void-subtle border border-void-border font-mono text-xs shrink-0 w-full lg:w-72 space-y-3">
+                <div className="text-[10px] text-slate-400 uppercase border-b border-void-border/50 pb-1.5">
+                  WING LEADERSHIP
                 </div>
-                <div className="font-serif text-base font-bold text-white mt-0.5">
-                  {wing.lead}
+                <Link
+                  href={`/u/${wing.leadUsername}`}
+                  className="block hover:text-cyan-axon transition-colors"
+                >
+                  <div className="text-[10px] text-cyan-axon uppercase">
+                    DIRECTOR
+                  </div>
+                  <div className="font-serif text-base font-bold text-white">
+                    {wing.lead}
+                  </div>
+                </Link>
+                <Link
+                  href={`/u/${wing.coLeadUsername}`}
+                  className="block pt-2 border-t border-void-border/50 hover:text-cyan-axon transition-colors"
+                >
+                  <div className="text-[10px] text-slate-400 uppercase">
+                    CO-DIRECTOR
+                  </div>
+                  <div className="font-serif text-sm font-semibold text-slate-200">
+                    {wing.coLead}
+                  </div>
+                </Link>
+                <div className="pt-2 border-t border-void-border/50 text-[10px] text-slate-400">
+                  IMAC, UET Lahore Chapter Node
                 </div>
-                <div className="text-[11px] text-cyan-axon mt-0.5">
-                  {wing.role}
-                </div>
-                <div className="mt-3 pt-2 border-t border-void-border/50 text-[10px] text-slate-400">
-                  UET Lahore Chapter Node →
-                </div>
-              </Link>
+              </div>
             </div>
 
             <div className="mt-8 pt-6 border-t border-void-border/60 grid grid-cols-1 md:grid-cols-2 gap-6 font-mono text-xs">

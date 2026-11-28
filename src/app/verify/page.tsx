@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   title: "Credential Verification Registry",
   description:
     "Official AXON verification portal for validating student member credentials, workshop certificates, and leadership appointments originating at IMAC UET Lahore.",
-  alternates: { canonical: "https://axon.org.pk/verify" },
+  alternates: { canonical: "https://askme.pk/verify" },
 };
 
 interface VerifyPageProps {

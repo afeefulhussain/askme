@@ -1,38 +1,77 @@
-import type { RbacRole } from "@/lib/types";
+import type { PortalRole } from "@/lib/types";
 
-export function canAccessDashboard(role: RbacRole): boolean {
+export function canAccessDashboard(role: PortalRole): boolean {
   return (
-    role === "approved_member" ||
-    role === "wing_director" ||
-    role === "super_admin"
+    role !== "PUBLIC_VISITOR" && role !== "PENDING_APPLICANT"
   );
 }
 
-export function canSubmitProjects(role: RbacRole): boolean {
+export function canSubmitProjects(role: PortalRole): boolean {
   return canAccessDashboard(role);
 }
 
-export function canSubmitBlogs(role: RbacRole): boolean {
+export function canSubmitBlogs(role: PortalRole): boolean {
   return canAccessDashboard(role);
 }
 
-export function canAccessAdmin(role: RbacRole): boolean {
-  return role === "wing_director" || role === "super_admin";
+export function canAccessAdmin(role: PortalRole): boolean {
+  return (
+    role === "CO_DIRECTOR" ||
+    role === "DIRECTOR" ||
+    role === "CORE_LEAD" ||
+    role === "CORE_AUDITOR" ||
+    role === "ADVISOR" ||
+    role === "SUPER_ADMIN"
+  );
 }
 
-export function isSuperAdmin(role: RbacRole): boolean {
-  return role === "super_admin";
+export function isSuperAdmin(role: PortalRole): boolean {
+  return role === "SUPER_ADMIN";
 }
 
-export function formatRbacLabel(role: RbacRole): string {
+export function canCreateEventProposal(role: PortalRole): boolean {
+  return role === "SUPER_ADMIN" || role === "CORE_LEAD" || role === "ADVISOR";
+}
+
+export function canApproveEventsAndContent(role: PortalRole): boolean {
+  return role === "SUPER_ADMIN";
+}
+
+export function canUploadCertificateCsv(
+  role: PortalRole,
+  wingId: string
+): boolean {
+  if (role === "SUPER_ADMIN") return true;
+  return (
+    (role === "DIRECTOR" || role === "CO_DIRECTOR") && wingId === "technical"
+  );
+}
+
+export function canViewFinanceAndAudit(role: PortalRole): boolean {
+  return (
+    role === "SUPER_ADMIN" ||
+    role === "CORE_AUDITOR" ||
+    role === "ADVISOR"
+  );
+}
+
+export function formatRbacLabel(role: PortalRole): string {
   switch (role) {
-    case "super_admin":
-      return "Super Admin (Executive Council)";
-    case "wing_director":
+    case "SUPER_ADMIN":
+      return "Super Admin (President)";
+    case "ADVISOR":
+      return "Faculty Advisor (Patron)";
+    case "CORE_AUDITOR":
+      return "Core Finance Auditor";
+    case "CORE_LEAD":
+      return "Core Team Lead";
+    case "DIRECTOR":
       return "Wing Director";
-    case "approved_member":
+    case "CO_DIRECTOR":
+      return "Wing Co-Director";
+    case "APPROVED_MEMBER":
       return "Approved Member";
-    case "pending_applicant":
+    case "PENDING_APPLICANT":
       return "Pending Applicant";
     default:
       return "Public Visitor";

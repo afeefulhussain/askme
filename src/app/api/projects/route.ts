@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   canAccessAdmin,
+  canApproveEventsAndContent,
   canSubmitProjects,
   getServerSession,
   isSuperAdmin,
@@ -12,7 +13,7 @@ import {
   readDb,
 } from "@/lib/db";
 import { fetchGitHubRepoMetadata } from "@/lib/github";
-import type { Project } from "@/lib/types";
+import { projectCreateSchema, projectModerationSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +31,12 @@ export async function GET(req: NextRequest) {
   }
 
   if (scope === "all" && session && canAccessAdmin(session.rbacRole)) {
-    const list = isSuperAdmin(session.rbacRole)
-      ? db.projects
-      : db.projects.filter((p) => p.wingId === session.wingId);
+    const list =
+      isSuperAdmin(session.rbacRole) || session.rbacRole === "ADVISOR"
+        ? db.projects
+        : session.rbacRole === "CORE_LEAD"
+        ? db.projects.filter((p) => session.supervisedWings.includes(p.wingId))
+        : db.projects.filter((p) => p.wingId === session.wingId);
     return NextResponse.json({ projects: list });
   }
 
@@ -47,7 +51,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Access Denied: Only authenticated, admin-approved AXON members may link GitHub repositories.",
+          "Access Denied: Only authenticated, approved AXON members may submit projects.",
       },
       { status: 403 }
     );
@@ -62,24 +66,21 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = (await req.json()) as {
-      githubRepo?: string;
-      title?: string;
-      summary?: string;
-      architecture?: string;
-      liveDemoUrl?: string;
-      wingId?: string;
-      techStack?: string[];
-    };
-
-    if (!body.githubRepo?.trim()) {
+    const raw = await req.json();
+    const parsed = projectCreateSchema.safeParse(raw);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "GitHub repository URL is required." },
+        {
+          error:
+            parsed.error.issues[0]?.message ||
+            "GitHub repository URL is required.",
+        },
         { status: 400 }
       );
     }
 
-    const synced = await fetchGitHubRepoMetadata(body.githubRepo);
+    const d = parsed.data;
+    const synced = await fetchGitHubRepoMetadata(d.githubRepo);
     if (!synced) {
       return NextResponse.json(
         {
@@ -91,27 +92,26 @@ export async function POST(req: NextRequest) {
     }
 
     const project = createProjectRecord(member, {
-      title: body.title?.trim() || `${synced.title}: ${synced.description.slice(0, 60)}`,
-      summary: body.summary?.trim() || synced.description,
+      title: d.title || `${synced.title}: ${synced.description.slice(0, 60)}`,
+      summary: d.summary || synced.description,
       architecture:
-        body.architecture?.trim() ||
-        `Repository ${synced.fullName} synced via GitHub REST API (${synced.primaryLanguage}, ${synced.stars} stars).`,
+        d.architecture ||
+        `Repository ${synced.fullName} synced from GitHub (${synced.primaryLanguage}, ${synced.stars} stars).`,
       githubRepo: synced.htmlUrl,
-      liveDemoUrl: body.liveDemoUrl?.trim() || synced.homepage || undefined,
+      liveDemoUrl: d.liveDemoUrl || synced.homepage || undefined,
+      coverImage: d.coverImage || undefined,
       techStack:
-        body.techStack && body.techStack.length > 0
-          ? body.techStack
-          : synced.languages,
+        d.techStack && d.techStack.length > 0 ? d.techStack : synced.languages,
       stars: synced.stars,
       forks: synced.forks,
       primaryLanguage: synced.primaryLanguage,
-      wingId: body.wingId || member.wingId,
+      wingId: d.wingId || member.wingId,
     });
 
     return NextResponse.json({ project, synced }, { status: 201 });
   } catch {
     return NextResponse.json(
-      { error: "Failed to sync and publish project." },
+      { error: "Failed to submit project for Super Admin review." },
       { status: 400 }
     );
   }
@@ -119,26 +119,36 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const session = getServerSession();
-  if (!session || !canAccessAdmin(session.rbacRole)) {
+  if (!session || !canApproveEventsAndContent(session.rbacRole)) {
     return NextResponse.json(
-      { error: "Unauthorized: Wing Director or Super Admin required." },
+      {
+        error:
+          "Access Denied: Only the Super Admin may approve or reject submitted projects.",
+      },
       { status: 403 }
     );
   }
 
   try {
-    const body = (await req.json()) as {
-      id?: string;
-      status?: Project["status"];
-    };
-    if (!body.id || !body.status) {
+    const raw = await req.json();
+    const parsed = projectModerationSchema.safeParse(raw);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Project ID and status are required." },
+        {
+          error:
+            parsed.error.issues[0]?.message ||
+            "Project ID and valid moderation status are required.",
+        },
         { status: 400 }
       );
     }
 
-    const updated = moderateProjectRecord(body.id, body.status);
+    const updated = moderateProjectRecord(
+      parsed.data.id,
+      parsed.data.status,
+      session.name,
+      session.rbacRole
+    );
     if (!updated) {
       return NextResponse.json({ error: "Project not found." }, { status: 404 });
     }

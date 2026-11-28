@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   canAccessAdmin,
+  canApproveEventsAndContent,
   canSubmitBlogs,
   getServerSession,
   isSuperAdmin,
@@ -11,7 +12,7 @@ import {
   moderateBlogRecord,
   readDb,
 } from "@/lib/db";
-import type { BlogPost } from "@/lib/types";
+import { blogCreateSchema, blogModerationSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -27,9 +28,12 @@ export async function GET(req: NextRequest) {
   }
 
   if (scope === "all" && session && canAccessAdmin(session.rbacRole)) {
-    const list = isSuperAdmin(session.rbacRole)
-      ? db.blogs
-      : db.blogs.filter((b) => b.wingId === session.wingId);
+    const list =
+      isSuperAdmin(session.rbacRole) || session.rbacRole === "ADVISOR"
+        ? db.blogs
+        : session.rbacRole === "CORE_LEAD"
+        ? db.blogs.filter((b) => session.supervisedWings.includes(b.wingId))
+        : db.blogs.filter((b) => b.wingId === session.wingId);
     return NextResponse.json({ blogs: list });
   }
 
@@ -53,31 +57,30 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = (await req.json()) as {
-      title?: string;
-      summary?: string;
-      content?: string;
-      tags?: string[];
-    };
-
-    if (!body.title?.trim() || !body.summary?.trim() || !body.content?.trim()) {
+    const raw = await req.json();
+    const parsed = blogCreateSchema.safeParse(raw);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Title, summary, and content are required." },
+        {
+          error:
+            parsed.error.issues[0]?.message ||
+            "Title, summary, and article content are required.",
+        },
         { status: 400 }
       );
     }
 
     const post = createBlogDraft(member, {
-      title: body.title,
-      summary: body.summary,
-      content: body.content,
-      tags: body.tags || [],
+      title: parsed.data.title,
+      summary: parsed.data.summary,
+      content: parsed.data.content,
+      tags: parsed.data.tags,
     });
 
     return NextResponse.json({ blog: post }, { status: 201 });
   } catch {
     return NextResponse.json(
-      { error: "Failed to save blog draft." },
+      { error: "Failed to submit article for review." },
       { status: 400 }
     );
   }
@@ -85,26 +88,36 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const session = getServerSession();
-  if (!session || !canAccessAdmin(session.rbacRole)) {
+  if (!session || !canApproveEventsAndContent(session.rbacRole)) {
     return NextResponse.json(
-      { error: "Unauthorized: Wing Director or Super Admin access required." },
+      {
+        error:
+          "Access Denied: Only the Super Admin may approve or reject articles for publication.",
+      },
       { status: 403 }
     );
   }
 
   try {
-    const body = (await req.json()) as {
-      id?: string;
-      status?: BlogPost["status"];
-    };
-    if (!body.id || !body.status) {
+    const raw = await req.json();
+    const parsed = blogModerationSchema.safeParse(raw);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Blog ID and status are required." },
+        {
+          error:
+            parsed.error.issues[0]?.message ||
+            "Blog ID and valid moderation status are required.",
+        },
         { status: 400 }
       );
     }
 
-    const updated = moderateBlogRecord(body.id, body.status);
+    const updated = moderateBlogRecord(
+      parsed.data.id,
+      parsed.data.status,
+      session.name,
+      session.rbacRole
+    );
     if (!updated) {
       return NextResponse.json({ error: "Article not found." }, { status: 404 });
     }

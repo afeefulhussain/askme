@@ -62,11 +62,11 @@ export async function generateMetadata({
   return {
     title: `${member.name} (${member.memberId})`,
     description: `${member.headline} — Verified AXON Member (${member.wing}, ${member.chapter}).`,
-    alternates: { canonical: `https://axon.org.pk/u/${member.username}` },
+    alternates: { canonical: `https://askme.pk/u/${member.username}` },
     openGraph: {
       title: `${member.name} | AXON Verified Portfolio`,
       description: member.headline,
-      url: `https://axon.org.pk/u/${member.username}`,
+      url: `https://askme.pk/u/${member.username}`,
       images: [
         {
           url: `/api/og?username=${encodeURIComponent(member.username)}`,
@@ -88,7 +88,7 @@ export async function generateMetadata({
 export default async function StudentPortfolioPage({ params }: PageProps) {
   const member = getMemberByUsername(params.username);
 
-  if (!member || member.rbacRole === "pending_applicant") {
+  if (!member || member.rbacRole === "PENDING_APPLICANT") {
     notFound();
   }
 
@@ -225,6 +225,18 @@ export default async function StudentPortfolioPage({ params }: PageProps) {
                 <ShieldCheck className="w-4 h-4" />
                 <span>Verify Credential</span>
               </Link>
+
+              {member.resumeUrl && (
+                <a
+                  href={member.resumeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3.5 py-1.5 bg-void-subtle border border-cyan-axon/40 text-cyan-axon rounded hover:bg-cyan-axon/10 flex items-center gap-1.5 transition-colors no-print"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>Resume PDF</span>
+                </a>
+              )}
             </div>
           </div>
         </div>

@@ -7,26 +7,33 @@ import type { MembershipApplication, Wing } from "@/lib/types";
 
 interface JoinPortalClientProps {
   wings: Wing[];
+  chapters: string[];
   initialWing?: string;
 }
 
 export default function JoinPortalClient({
   wings,
+  chapters,
   initialWing,
 }: JoinPortalClientProps) {
   const validWing =
     wings.find((w) => w.id === initialWing || w.slug === initialWing)?.id ||
-    "systems-infra";
+    "technical";
 
   const [submittedApp, setSubmittedApp] =
     useState<MembershipApplication | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [chapterChoice, setChapterChoice] = useState(
+    chapters[0] || "IMAC, UET Lahore (Founding Chapter)"
+  );
+  const [customChapter, setCustomChapter] = useState("");
+
   const [formData, setFormData] = useState({
     name: "",
     email: "",
-    university: "UET Lahore",
+    university: chapters[0] || "IMAC, UET Lahore (Founding Chapter)",
     roleType: "General Member Engineer",
     preferredWing: validWing,
     githubUsername: "",
@@ -38,11 +45,19 @@ export default function JoinPortalClient({
     setSubmitting(true);
     setError(null);
 
+    const resolvedUniversity =
+      chapterChoice === "__custom__"
+        ? customChapter.trim() || "Prospective University Chapter"
+        : chapterChoice;
+
     try {
       const res = await fetch("/api/applications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          university: resolvedUniversity,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -64,7 +79,7 @@ export default function JoinPortalClient({
           <CheckCircle2 className="w-6 h-6" />
         </div>
         <div className="font-mono text-xs text-cyan-axon mb-2">
-          APPLICATION REFERENCE: {submittedApp.id.toUpperCase()} // STATUS: PENDING
+          APPLICATION REFERENCE: {submittedApp.id.toUpperCase()} {"//"} STATUS: PENDING
         </div>
         <h2 className="font-serif text-2xl sm:text-3xl font-bold text-white mb-2">
           Application Logged in Directorate Queue
@@ -150,18 +165,37 @@ export default function JoinPortalClient({
 
           <div>
             <label className="block text-slate-300 mb-2">
-              UNIVERSITY / INSTITUTION *
+              UNIVERSITY / CHAPTER NODE *
             </label>
-            <input
-              type="text"
-              required
-              value={formData.university}
-              onChange={(e) =>
-                setFormData({ ...formData, university: e.target.value })
-              }
-              placeholder="e.g. UET Lahore, NUST, FAST, GIKI"
-              className="w-full bg-void-400 border border-void-border rounded px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-axon text-xs"
-            />
+            <select
+              value={chapterChoice}
+              onChange={(e) => {
+                setChapterChoice(e.target.value);
+                if (e.target.value !== "__custom__") {
+                  setFormData({ ...formData, university: e.target.value });
+                }
+              }}
+              className="w-full bg-void-400 border border-void-border rounded px-4 py-2.5 text-white focus:outline-none focus:border-cyan-axon text-xs"
+            >
+              {chapters.map((ch) => (
+                <option key={ch} value={ch}>
+                  {ch}
+                </option>
+              ))}
+              <option value="__custom__">
+                Other University / Prospective New Chapter
+              </option>
+            </select>
+            {chapterChoice === "__custom__" && (
+              <input
+                type="text"
+                required
+                value={customChapter}
+                onChange={(e) => setCustomChapter(e.target.value)}
+                placeholder="Enter University & Campus Name"
+                className="mt-2 w-full bg-void-400 border border-void-border rounded px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-axon text-xs"
+              />
+            )}
           </div>
 
           <div>
