@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   User,
@@ -22,17 +23,21 @@ import {
 } from "lucide-react";
 import DigitalIdCard from "@/components/DigitalIdCard";
 import type {
-  AxonMember,
   BlogPost,
   PortfolioTheme,
   Project,
+  SafeSessionMember,
   VerifiedCertificate,
   Wing,
 } from "@/lib/types";
-import { canAccessAdmin, formatRbacLabel } from "@/lib/rbac";
+import {
+  canAccessAdmin,
+  canResetPasswords,
+  formatRbacLabel,
+} from "@/lib/rbac";
 
 interface MemberDashboardClientProps {
-  initialMember: AxonMember;
+  initialMember: SafeSessionMember;
   initialProjects: Project[];
   initialBlogs: BlogPost[];
   initialCertificates: VerifiedCertificate[];
@@ -46,25 +51,30 @@ export default function MemberDashboardClient({
   initialCertificates,
   wings,
 }: MemberDashboardClientProps) {
-  const [member, setMember] = useState<AxonMember>(initialMember);
+  const [member, setMember] = useState<SafeSessionMember>(initialMember);
   const [activeTab, setActiveTab] = useState<
     "id-card" | "portfolio" | "projects" | "blogs" | "certificates"
   >("id-card");
 
-  // Portfolio Builder state
+  // Complete Self-Editing Portfolio Builder state
+  const [displayName, setDisplayName] = useState(member.name);
   const [headline, setHeadline] = useState(member.headline);
   const [bio, setBio] = useState(member.bio);
+  const [location, setLocation] = useState(member.location || "Lahore, Pakistan");
+  const [department, setDepartment] = useState(member.department || "");
+  const [rollNumber, setRollNumber] = useState(member.rollNumber || "");
   const [githubUsername, setGithubUsername] = useState(member.githubUsername);
   const [linkedin, setLinkedin] = useState(member.linkedin);
+  const [xHandle, setXHandle] = useState(member.xHandle || "");
+  const [instagram, setInstagram] = useState(member.instagram || "");
+  const [website, setWebsite] = useState(member.website || "");
   const [avatarUrl, setAvatarUrl] = useState(member.avatar);
   const [resumeUrl, setResumeUrl] = useState(member.resumeUrl || "");
   const [graduationYear, setGraduationYear] = useState(member.graduationYear);
   const [internshipAvailable, setInternshipAvailable] = useState(
     member.internshipAvailable
   );
-  const [themePreference, setThemePreference] = useState<PortfolioTheme>(
-    member.themePreference
-  );
+  const themePreference: PortfolioTheme = member.themePreference;
   const [languagesInput, setLanguagesInput] = useState(
     member.skills.languages.join(", ")
   );
@@ -74,10 +84,18 @@ export default function MemberDashboardClient({
   const [systemsInput, setSystemsInput] = useState(
     member.skills.systems.join(", ")
   );
+  const [timelineText, setTimelineText] = useState(
+    (member.timeline || [])
+      .map((t) => `${t.year} | ${t.role} | ${t.organization} | ${t.description}`)
+      .join("\n")
+  );
   const [savingPortfolio, setSavingPortfolio] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [uploadingAsset, setUploadingAsset] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const portfolioLockRef = useRef(false);
+  const projectLockRef = useRef(false);
+  const blogLockRef = useRef(false);
 
   // Project Submission state (starts "Under Review" until Super Admin approves)
   const [projectList, setProjectList] = useState<Project[]>(initialProjects);
@@ -173,6 +191,8 @@ export default function MemberDashboardClient({
 
   const handleSavePortfolio = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (portfolioLockRef.current) return;
+    portfolioLockRef.current = true;
     setSavingPortfolio(true);
     setSavedSuccess(false);
 
@@ -182,15 +202,33 @@ export default function MemberDashboardClient({
         .map((s) => s.trim())
         .filter(Boolean);
 
+    const parsedTimeline = timelineText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [year = "2026 - Present", role = "", organization = "AXON", description = ""] =
+          line.split("|").map((p) => p.trim());
+        return { year, role: role || member.designation, organization, description };
+      })
+      .filter((t) => t.role);
+
     try {
       const res = await fetch("/api/portfolio", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          name: displayName,
           headline,
           bio,
+          location,
+          department,
+          rollNumber,
           githubUsername,
           linkedin,
+          xHandle,
+          instagram,
+          website,
           avatar: avatarUrl,
           resumeUrl: resumeUrl || undefined,
           graduationYear: Number(graduationYear) || 2027,
@@ -201,6 +239,7 @@ export default function MemberDashboardClient({
             frameworks: parseCsv(frameworksInput),
             systems: parseCsv(systemsInput),
           },
+          timeline: parsedTimeline.length > 0 ? parsedTimeline : undefined,
         }),
       });
       if (res.ok) {
@@ -210,13 +249,15 @@ export default function MemberDashboardClient({
         setTimeout(() => setSavedSuccess(false), 3000);
       }
     } finally {
+      portfolioLockRef.current = false;
       setSavingPortfolio(false);
     }
   };
 
   const handleSyncProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!repoUrl.trim()) return;
+    if (!repoUrl.trim() || projectLockRef.current) return;
+    projectLockRef.current = true;
     setSyncingRepo(true);
     setProjError(null);
     setProjMessage(null);
@@ -251,12 +292,15 @@ export default function MemberDashboardClient({
     } catch {
       setProjError("Network error while submitting project.");
     } finally {
+      projectLockRef.current = false;
       setSyncingRepo(false);
     }
   };
 
   const handleSubmitBlog = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (blogLockRef.current) return;
+    blogLockRef.current = true;
     setSubmittingBlog(true);
     setBlogSuccess(null);
     setBlogError(null);
@@ -288,6 +332,7 @@ export default function MemberDashboardClient({
         );
       }
     } finally {
+      blogLockRef.current = false;
       setSubmittingBlog(false);
     }
   };
@@ -325,7 +370,7 @@ export default function MemberDashboardClient({
 
         <div className="flex flex-wrap items-center gap-3">
           <Link
-            href={`/u/${member.username}`}
+            href={`/portfolio/${member.username}`}
             className="px-4 py-2 bg-void-subtle border border-void-border hover:border-cyan-axon text-slate-200 rounded flex items-center gap-1.5 transition-colors"
           >
             <Eye className="w-3.5 h-3.5 text-cyan-axon" />
@@ -361,7 +406,7 @@ export default function MemberDashboardClient({
             {member.portfolioViews.toLocaleString()}
           </div>
           <div className="text-[10px] text-circuit-green mt-0.5">
-            askme.pk/u/{member.username}
+            askme.pk/portfolio/{member.username}
           </div>
         </div>
 
@@ -462,6 +507,28 @@ export default function MemberDashboardClient({
                 </div>
               )}
             </div>
+
+            {/* Password Governance Policy Banner */}
+            <div className="p-4 rounded-lg bg-void-subtle border border-void-border space-y-2">
+              <div className="flex items-center gap-2 text-cyan-axon text-[11px] font-bold uppercase">
+                <Lock className="w-3.5 h-3.5" />
+                <span>Password & Credential Governance</span>
+              </div>
+              {canResetPasswords(member.rbacRole) ? (
+                <p className="text-slate-300 text-[11px] font-sans leading-relaxed">
+                  As President (<strong className="text-white">SUPER_ADMIN</strong>), you hold exclusive authority to manage and reset member passwords in the{" "}
+                  <Link href="/admin" className="text-cyan-axon underline">
+                    Executive Admin Console
+                  </Link>
+                  .
+                </p>
+              ) : (
+                <p className="text-slate-400 text-[11px] font-sans leading-relaxed">
+                  Self-service password resets are restricted by AXON security policy. To request a password change or reset, contact the AXON President (
+                  <span className="text-white font-mono">afeef@askme.pk</span>).
+                </p>
+              )}
+            </div>
           </div>
 
           <div>
@@ -484,10 +551,10 @@ export default function MemberDashboardClient({
               <p className="text-slate-400 text-xs">
                 Updates publish immediately to{" "}
                 <Link
-                  href={`/u/${member.username}`}
+                  href={`/portfolio/${member.username}`}
                   className="text-cyan-axon underline"
                 >
-                  /u/{member.username}
+                  /portfolio/{member.username}
                 </Link>
               </p>
             </div>
@@ -513,9 +580,9 @@ export default function MemberDashboardClient({
                 Profile Portrait (PNG / JPEG / WebP)
               </label>
               <div className="flex items-center gap-3">
-                <img
+                <Image
                   src={avatarUrl}
-                  alt={member.name}
+                  alt={displayName || member.name}
                   width={44}
                   height={44}
                   className="w-11 h-11 rounded object-cover border border-void-border"
@@ -583,6 +650,56 @@ export default function MemberDashboardClient({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-slate-300 mb-1.5 uppercase text-[11px]">
+                Full Display Name *
+              </label>
+              <input
+                type="text"
+                required
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                className="w-full bg-void-400 border border-void-border rounded px-4 py-2.5 text-white focus:outline-none focus:border-cyan-axon text-xs"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-300 mb-1.5 uppercase text-[11px]">
+                City / Location
+              </label>
+              <input
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="Lahore, Pakistan"
+                className="w-full bg-void-400 border border-void-border rounded px-4 py-2.5 text-white focus:outline-none focus:border-cyan-axon text-xs"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-300 mb-1.5 uppercase text-[11px]">
+                University Roll / Registration No.
+              </label>
+              <input
+                type="text"
+                value={rollNumber}
+                onChange={(e) => setRollNumber(e.target.value)}
+                className="w-full bg-void-400 border border-void-border rounded px-4 py-2.5 text-white focus:outline-none focus:border-cyan-axon text-xs"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-300 mb-1.5 uppercase text-[11px]">
+                Academic Department
+              </label>
+              <input
+                type="text"
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                className="w-full bg-void-400 border border-void-border rounded px-4 py-2.5 text-white focus:outline-none focus:border-cyan-axon text-xs"
+              />
+            </div>
+
             <div className="md:col-span-2">
               <label className="block text-slate-300 mb-1.5 uppercase text-[11px]">
                 Professional Headline
@@ -609,7 +726,7 @@ export default function MemberDashboardClient({
 
             <div>
               <label className="block text-slate-300 mb-1.5 uppercase text-[11px]">
-                GitHub Username (Manual Link)
+                GitHub Username
               </label>
               <input
                 type="text"
@@ -633,6 +750,45 @@ export default function MemberDashboardClient({
 
             <div>
               <label className="block text-slate-300 mb-1.5 uppercase text-[11px]">
+                X / Twitter Profile URL or @handle
+              </label>
+              <input
+                type="text"
+                value={xHandle}
+                onChange={(e) => setXHandle(e.target.value)}
+                placeholder="@handle"
+                className="w-full bg-void-400 border border-void-border rounded px-4 py-2.5 text-white focus:outline-none focus:border-cyan-axon text-xs"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-300 mb-1.5 uppercase text-[11px]">
+                Personal Website / Portfolio URL
+              </label>
+              <input
+                type="text"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                placeholder="https://..."
+                className="w-full bg-void-400 border border-void-border rounded px-4 py-2.5 text-white focus:outline-none focus:border-cyan-axon text-xs"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-300 mb-1.5 uppercase text-[11px]">
+                Instagram Handle / URL
+              </label>
+              <input
+                type="text"
+                value={instagram}
+                onChange={(e) => setInstagram(e.target.value)}
+                placeholder="@handle"
+                className="w-full bg-void-400 border border-void-border rounded px-4 py-2.5 text-white focus:outline-none focus:border-cyan-axon text-xs"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-300 mb-1.5 uppercase text-[11px]">
                 Graduation Year
               </label>
               <input
@@ -641,24 +797,6 @@ export default function MemberDashboardClient({
                 onChange={(e) => setGraduationYear(Number(e.target.value))}
                 className="w-full bg-void-400 border border-void-border rounded px-4 py-2.5 text-white focus:outline-none focus:border-cyan-axon text-xs"
               />
-            </div>
-
-            <div>
-              <label className="block text-slate-300 mb-1.5 uppercase text-[11px]">
-                Editorial Layout / Accent Preset
-              </label>
-              <select
-                value={themePreference}
-                onChange={(e) =>
-                  setThemePreference(e.target.value as PortfolioTheme)
-                }
-                className="w-full bg-void-400 border border-void-border rounded px-4 py-2.5 text-white focus:outline-none focus:border-cyan-axon text-xs"
-              >
-                <option value="obsidian-cyan">Obsidian Cyan (Default)</option>
-                <option value="imac-emerald">IMAC Circuit Emerald</option>
-                <option value="editorial-slate">Editorial Slate</option>
-                <option value="monolith-amber">Hardware Monolith Amber</option>
-              </select>
             </div>
 
             <div>
@@ -698,6 +836,18 @@ export default function MemberDashboardClient({
             </div>
 
             <div className="md:col-span-2">
+              <label className="block text-slate-300 mb-1.5 uppercase text-[11px]">
+                Experience Timeline (Format per line: Period | Role | Organization | Highlight)
+              </label>
+              <textarea
+                rows={3}
+                value={timelineText}
+                onChange={(e) => setTimelineText(e.target.value)}
+                className="w-full bg-void-400 border border-void-border rounded px-4 py-2.5 text-white focus:outline-none focus:border-cyan-axon text-xs font-mono"
+              />
+            </div>
+
+            <div className="md:col-span-2">
               <label className="inline-flex items-center gap-2 text-slate-300 cursor-pointer">
                 <input
                   type="checkbox"
@@ -706,8 +856,8 @@ export default function MemberDashboardClient({
                   className="accent-cyan-400"
                 />
                 <span>
-                  Display &quot;Available for Internships / Roles&quot; badge on
-                  public talent directory
+                  Display &quot;Open to Collaborate / Internships&quot; badge on
+                  public directory & portfolio
                 </span>
               </label>
             </div>
@@ -715,7 +865,7 @@ export default function MemberDashboardClient({
 
           <div className="flex justify-end gap-3 pt-2">
             <Link
-              href={`/u/${member.username}`}
+              href={`/portfolio/${member.username}`}
               className="px-4 py-2.5 bg-void-subtle border border-void-border text-slate-300 hover:text-white rounded"
             >
               View Live Portfolio

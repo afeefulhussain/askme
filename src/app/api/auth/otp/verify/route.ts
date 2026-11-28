@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   SESSION_COOKIE_OPTIONS,
+  sanitizeSessionMember,
   signSession,
   verifyOtpHash,
 } from "@/lib/auth";
@@ -93,7 +94,10 @@ export async function POST(req: NextRequest) {
       `${member.memberId} (${member.email})`
     );
 
-    const res = NextResponse.json({ user: sessionUser, member });
+    const res = NextResponse.json({
+      user: sessionUser,
+      member: sanitizeSessionMember(member),
+    });
     res.cookies.set(SESSION_COOKIE_OPTIONS.name, token, {
       httpOnly: SESSION_COOKIE_OPTIONS.httpOnly,
       secure: SESSION_COOKIE_OPTIONS.secure,

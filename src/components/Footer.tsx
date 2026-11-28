@@ -1,4 +1,5 @@
 import React from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   ShieldCheck,
@@ -19,9 +20,11 @@ export default function Footer() {
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded bg-void-card border border-void-border flex items-center justify-center p-1">
-              <img
+              <Image
                 src="/assets/axon-mark.svg"
                 alt="AXON Brand Mark"
+                width={32}
+                height={32}
                 className="w-full h-full object-contain"
               />
             </div>

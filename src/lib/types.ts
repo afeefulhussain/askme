@@ -66,6 +66,12 @@ export interface FinanceRecord {
   date: string;
 }
 
+export interface EventScheduleItem {
+  time: string;
+  topic: string;
+  speaker?: string;
+}
+
 export interface AxonEvent {
   id: string;
   slug: string;
@@ -81,11 +87,19 @@ export interface AxonEvent {
   time: string;
   location: string;
   isVirtual: boolean;
-  status: "Pending Approval" | "Scheduled" | "Completed" | "Registrations Open" | "Rejected";
+  status:
+    | "Pending Approval"
+    | "Scheduled"
+    | "Completed"
+    | "Registrations Open"
+    | "Rejected";
   wingId: string;
   capacity: number;
   attendeeCount: number;
   submittedBy: string;
+  posterImage?: string;
+  externalRegistrationUrl?: string;
+  schedule?: EventScheduleItem[];
   speaker: {
     name: string;
     title: string;
@@ -179,21 +193,87 @@ export interface Endorsement {
   awardedAt: string;
 }
 
+/**
+ * Dynamic Editorial Member Portfolio Profile (/portfolio/[slug])
+ */
+export interface MemberPortfolioProject {
+  id: string;
+  title: string;
+  summary: string;
+  description: string;
+  category: string;
+  tags: string[];
+  thumbnailUrl?: string;
+  liveUrl?: string;
+  repoUrl?: string;
+  year: string;
+  role?: string;
+  deliverables?: string[];
+}
+
+export interface MemberPortfolioExperience {
+  role: string;
+  organization: string;
+  period: string;
+  highlights: string[];
+}
+
+export interface MemberPortfolioProfile {
+  slug: string;
+  fullName: string;
+  initials: string;
+  statusBadge: string;
+  headline: string;
+  bio: string;
+  location: string;
+  avatarUrl?: string;
+  email: string;
+  socials: {
+    github?: string;
+    linkedin?: string;
+    x?: string;
+    instagram?: string;
+    website?: string;
+  };
+  skills: {
+    group: string;
+    items: string[];
+  }[];
+  projects: MemberPortfolioProject[];
+  experience: MemberPortfolioExperience[];
+  memberId?: string;
+  wingName?: string;
+  chapter?: string;
+  rollNumber?: string;
+  department?: string;
+  resumeUrl?: string;
+}
+
 export interface AxonMember {
   username: string;
   name: string;
   headline: string;
   memberId: string;
   designation: string;
-  category: "Patron" | "Core" | "Core (Independent Audit Line)" | "Directorate" | "Member";
+  category:
+    | "Patron"
+    | "Core"
+    | "Core (Independent Audit Line)"
+    | "Directorate"
+    | "Member";
   /** Internal only for public visibility rules */
   supervisedWings: string[];
   reportsTo?: string;
   portalResponsibilities?: string;
+  /** Salted scrypt hash stored on server only; stripped in API/SSR client props */
+  passwordHash?: string;
   rbacRole: PortalRole;
   wing: string;
   wingId: string;
   chapter: string;
+  rollNumber?: string;
+  department?: string;
+  location?: string;
   status:
     | "Active Member"
     | "Director"
@@ -206,6 +286,9 @@ export interface AxonMember {
   github: string;
   githubUsername: string;
   linkedin: string;
+  xHandle?: string;
+  instagram?: string;
+  website?: string;
   email: string;
   resumeUrl?: string;
   graduationYear: number;
@@ -231,14 +314,26 @@ export interface AxonMember {
   }[];
 }
 
+export type PublicAxonMember = Omit<
+  AxonMember,
+  "passwordHash" | "reportsTo" | "supervisedWings" | "portalResponsibilities"
+>;
+
+export type SafeSessionMember = Omit<AxonMember, "passwordHash">;
+
 export interface MembershipApplication {
   id: string;
   name: string;
   email: string;
+  rollNumber?: string;
+  department?: string;
   university: string;
   roleType: string;
   preferredWing: string;
   githubUsername: string;
+  linkedin?: string;
+  avatarUrl?: string;
+  skillsInput?: string;
   statement: string;
   status: "Pending" | "Approved" | "Rejected";
   assignedRole?: PortalRole;
@@ -265,6 +360,18 @@ export interface OtpChallenge {
   attempts: number;
 }
 
+export interface BackgroundJob {
+  id: string;
+  type: "EMAIL_DISPATCH" | "BULK_CSV_IMPORT";
+  status: "queued" | "processing" | "completed" | "failed";
+  summary: string;
+  processedCount?: number;
+  totalCount?: number;
+  error?: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
 export interface SessionUser {
   username: string;
   name: string;
@@ -275,6 +382,14 @@ export interface SessionUser {
   wing: string;
   supervisedWings: string[];
   avatar: string;
+}
+
+export interface PaginatedResult<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 export interface AxonDatabaseState {
@@ -291,4 +406,5 @@ export interface AxonDatabaseState {
   financeRecords: FinanceRecord[];
   auditLogs: AuditLog[];
   otpChallenges: Record<string, OtpChallenge>;
+  jobs: BackgroundJob[];
 }

@@ -23,6 +23,8 @@ export interface GitHubUserSummary {
   syncedLive: boolean;
 }
 
+const GITHUB_TIMEOUT_MS = 4000;
+
 export function parseGitHubRepoUrl(
   input: string
 ): { owner: string; repo: string } | null {
@@ -45,6 +47,23 @@ function getGitHubHeaders(): HeadersInit {
   return headers;
 }
 
+async function fetchGitHubWithTimeout(
+  url: string,
+  revalidateSeconds: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), GITHUB_TIMEOUT_MS);
+  try {
+    return await fetch(url, {
+      headers: getGitHubHeaders(),
+      signal: controller.signal,
+      next: { revalidate: revalidateSeconds },
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function fetchGitHubRepoMetadata(
   repoUrl: string
 ): Promise<GitHubRepoMetadata | null> {
@@ -55,32 +74,26 @@ export async function fetchGitHubRepoMetadata(
   const canonicalUrl = `https://github.com/${owner}/${repo}`;
 
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
+    const [res, langRes] = await Promise.allSettled([
+      fetchGitHubWithTimeout(`https://api.github.com/repos/${owner}/${repo}`, 300),
+      fetchGitHubWithTimeout(
+        `https://api.github.com/repos/${owner}/${repo}/languages`,
+        300
+      ),
+    ]);
 
-    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-      headers: getGitHubHeaders(),
-      signal: controller.signal,
-      next: { revalidate: 300 },
-    });
-    clearTimeout(timer);
-
-    if (res.ok) {
-      const data = await res.json();
+    if (res.status === "fulfilled" && res.value.ok) {
+      const data = await res.value.json();
       let languages: string[] = data.language ? [data.language] : [];
 
-      try {
-        const langRes = await fetch(
-          `https://api.github.com/repos/${owner}/${repo}/languages`,
-          { headers: getGitHubHeaders() }
-        );
-        if (langRes.ok) {
-          const langObj = (await langRes.json()) as Record<string, number>;
+      if (langRes.status === "fulfilled" && langRes.value.ok) {
+        try {
+          const langObj = (await langRes.value.json()) as Record<string, number>;
           const keys = Object.keys(langObj);
           if (keys.length > 0) languages = keys.slice(0, 6);
+        } catch {
+          // Ignore secondary language parse errors
         }
-      } catch {
-        // Ignore secondary language call failure
       }
 
       return {
@@ -93,7 +106,8 @@ export async function fetchGitHubRepoMetadata(
           `Verified GitHub repository ${owner}/${repo} linked via AXON GitHub Sync.`,
         htmlUrl: data.html_url || canonicalUrl,
         homepage: data.homepage || null,
-        stars: typeof data.stargazers_count === "number" ? data.stargazers_count : 0,
+        stars:
+          typeof data.stargazers_count === "number" ? data.stargazers_count : 0,
         forks: typeof data.forks_count === "number" ? data.forks_count : 0,
         primaryLanguage: data.language || languages[0] || "TypeScript",
         languages: languages.length > 0 ? languages : ["TypeScript"],
@@ -104,7 +118,7 @@ export async function fetchGitHubRepoMetadata(
       };
     }
   } catch {
-    // Graceful fallback when GitHub API is offline or rate-limited
+    // Graceful timeout/network fallback
   }
 
   return {
@@ -121,7 +135,7 @@ export async function fetchGitHubRepoMetadata(
     stars: 0,
     forks: 0,
     primaryLanguage: "TypeScript",
-    languages: ["TypeScript", "Docker"],
+    languages: ["TypeScript", "Next.js"],
     updatedAt: new Date().toISOString().split("T")[0],
     syncedLive: false,
   };
@@ -133,24 +147,13 @@ export async function fetchGitHubUserSummary(
 ): Promise<GitHubUserSummary> {
   const cleanUser = githubUsername.replace(/^@/, "").trim();
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3500);
     const [userRes, reposRes] = await Promise.all([
-      fetch(`https://api.github.com/users/${cleanUser}`, {
-        headers: getGitHubHeaders(),
-        signal: controller.signal,
-        next: { revalidate: 600 },
-      }),
-      fetch(
+      fetchGitHubWithTimeout(`https://api.github.com/users/${cleanUser}`, 600),
+      fetchGitHubWithTimeout(
         `https://api.github.com/users/${cleanUser}/repos?per_page=30&sort=updated`,
-        {
-          headers: getGitHubHeaders(),
-          signal: controller.signal,
-          next: { revalidate: 600 },
-        }
+        600
       ),
     ]);
-    clearTimeout(timer);
 
     if (userRes.ok && reposRes.ok) {
       const userData = await userRes.json();
@@ -169,7 +172,8 @@ export async function fetchGitHubUserSummary(
         }
       }
 
-      const totalLangRepos = Object.values(langCounts).reduce((a, b) => a + b, 0) || 1;
+      const totalLangRepos =
+        Object.values(langCounts).reduce((a, b) => a + b, 0) || 1;
       const topLanguages = Object.entries(langCounts)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 4)
@@ -190,7 +194,7 @@ export async function fetchGitHubUserSummary(
       }
     }
   } catch {
-    // Graceful fallback below
+    // Graceful timeout/network fallback
   }
 
   const langs = fallbackSkills.slice(0, 4);

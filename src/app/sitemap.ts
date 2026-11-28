@@ -63,7 +63,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const memberRoutes = Object.values(db.members)
     .filter((m) => m.isPublic && m.rbacRole !== "PENDING_APPLICANT")
     .map((m) => ({
-      url: `${baseUrl}/u/${m.username}`,
+      url: `${baseUrl}/portfolio/${m.username}`,
       lastModified: new Date(),
       changeFrequency: "weekly" as const,
       priority: 0.8,

@@ -74,7 +74,7 @@ export default function BlogsPage() {
 
             <div className="pt-4 border-t border-void-border/70 flex items-center justify-between font-mono text-xs">
               <Link
-                href={`/u/${post.author.username}`}
+                href={`/portfolio/${post.author.username}`}
                 className="text-slate-300 hover:text-white"
               >
                 By {post.author.name}

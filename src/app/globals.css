@@ -41,6 +41,38 @@ body {
   font-size: 0.7rem;
 }
 
+.font-editorial-serif {
+  font-family: "Times New Roman", var(--font-serif), Georgia, serif;
+}
+
+/* Native <dialog> modal scroll-containment & backdrop rules (modern web guidance) */
+dialog:modal {
+  overscroll-behavior: contain;
+}
+
+dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background-color: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(4px);
+}
+
+/* Accessible focus outlines across dark & light editorial surfaces */
+:focus-visible {
+  outline: 2px solid #0284c7;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

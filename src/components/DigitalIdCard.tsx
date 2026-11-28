@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import QRCode from "qrcode";
 import {
@@ -10,11 +11,15 @@ import {
   CheckCircle,
   Printer,
 } from "lucide-react";
-import type { AxonMember } from "@/lib/types";
+import type {
+  AxonMember,
+  PublicAxonMember,
+  SafeSessionMember,
+} from "@/lib/types";
 import QrCodeSvg from "@/components/QrCodeSvg";
 
 interface DigitalIdCardProps {
-  member: AxonMember;
+  member: AxonMember | SafeSessionMember | PublicAxonMember;
 }
 
 export default function DigitalIdCard({ member }: DigitalIdCardProps) {
@@ -159,7 +164,7 @@ export default function DigitalIdCard({ member }: DigitalIdCardProps) {
         margin: 1,
         color: { dark: "#0A0D14", light: "#FFFFFF" },
       });
-      const qrImg = new Image();
+      const qrImg = new window.Image();
       qrImg.src = qrDataUrl;
       await new Promise<void>((resolve) => {
         qrImg.onload = () => resolve();
@@ -189,9 +194,11 @@ export default function DigitalIdCard({ member }: DigitalIdCardProps) {
         <div className="flex items-center justify-between border-b border-void-border/70 pb-4 mb-5">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded bg-void-500 border border-void-border flex items-center justify-center p-1 shadow-inner">
-              <img
+              <Image
                 src="/assets/axon-mark.svg"
                 alt="AXON"
+                width={32}
+                height={32}
                 className="w-full h-full object-contain"
               />
             </div>
@@ -217,7 +224,7 @@ export default function DigitalIdCard({ member }: DigitalIdCardProps) {
         <div className="flex gap-4 items-start mb-5">
           <div className="relative shrink-0">
             <div className="w-24 h-28 rounded-lg overflow-hidden border border-void-border bg-void-500 shadow-md">
-              <img
+              <Image
                 src={member.avatar}
                 alt={member.name}
                 width={96}
@@ -330,7 +337,7 @@ export default function DigitalIdCard({ member }: DigitalIdCardProps) {
         </div>
 
         <Link
-          href={`/u/${member.username}`}
+          href={`/portfolio/${member.username}`}
           className="w-full py-2.5 px-4 bg-cyan-axon text-void-500 hover:bg-cyan-300 font-mono text-xs font-bold uppercase rounded flex items-center justify-center gap-1.5 transition-all shadow-sm"
         >
           <span>View Public Portfolio</span>

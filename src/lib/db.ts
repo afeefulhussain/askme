@@ -9,10 +9,16 @@ import type {
   ContactInquiry,
   Endorsement,
   EventRsvp,
+  EventScheduleItem,
+  FinanceRecord,
   MembershipApplication,
+  PaginatedResult,
   PortalRole,
   PortfolioTheme,
   Project,
+  PublicAxonMember,
+  SafeSessionMember,
+  SessionUser,
   VerifiedCertificate,
   WingTask,
 } from "@/lib/types";
@@ -32,9 +38,42 @@ import {
   WINGS,
 } from "@/data/axonData";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { deriveInitialPassword, hashPassword } from "@/lib/auth";
+import { sanitizePublicMember, sanitizeSessionMember } from "@/lib/rbac";
+
+function seedSaltForMember(memberId: string): string {
+  return crypto
+    .createHash("sha256")
+    .update(`axon-seed-salt:${memberId}`)
+    .digest("hex")
+    .slice(0, 32);
+}
+
+function ensureDbMigrations(state: AxonDatabaseState): boolean {
+  let changed = false;
+  if (!Array.isArray(state.jobs)) {
+    state.jobs = [];
+    changed = true;
+  }
+  for (const member of Object.values(state.members)) {
+    if (!member.passwordHash) {
+      const initialPass = deriveInitialPassword(member.username, member.memberId);
+      member.passwordHash = hashPassword(
+        initialPass,
+        seedSaltForMember(member.memberId)
+      );
+      changed = true;
+    }
+    if (!member.location) {
+      member.location = "Lahore, Pakistan";
+      changed = true;
+    }
+  }
+  return changed;
+}
 
 function createSeedState(): AxonDatabaseState {
-  return {
+  const seed: AxonDatabaseState = {
     members: structuredClone(MEMBERS_PORTFOLIOS),
     events: structuredClone(EVENTS),
     projects: structuredClone(PROJECTS),
@@ -48,7 +87,10 @@ function createSeedState(): AxonDatabaseState {
     financeRecords: structuredClone(INITIAL_FINANCE_RECORDS),
     auditLogs: structuredClone(INITIAL_AUDIT_LOGS),
     otpChallenges: {},
+    jobs: [],
   };
+  ensureDbMigrations(seed);
+  return seed;
 }
 
 let memoryCache: AxonDatabaseState | null = null;
@@ -72,7 +114,11 @@ export function readDb(): AxonDatabaseState {
       const raw = fs.readFileSync(dbPath, "utf8");
       const parsed = JSON.parse(raw) as AxonDatabaseState;
       if (parsed && parsed.members && parsed.certificates && parsed.events) {
+        const migrated = ensureDbMigrations(parsed);
         memoryCache = parsed;
+        if (migrated) {
+          writeDb(memoryCache);
+        }
         return memoryCache;
       }
     }
@@ -201,8 +247,13 @@ export function findMemberByEmail(email: string): AxonMember | null {
       wing: wingObj?.name || pendingApp.preferredWing,
       wingId: pendingApp.preferredWing,
       chapter: pendingApp.university,
+      rollNumber: pendingApp.rollNumber,
+      department: pendingApp.department,
+      location: "Lahore, Pakistan",
       status: "Pending Review",
-      avatar: `/api/avatar?name=${encodeURIComponent(pendingApp.name)}&id=PENDING`,
+      avatar:
+        pendingApp.avatarUrl ||
+        `/api/avatar?name=${encodeURIComponent(pendingApp.name)}&id=PENDING`,
       bio:
         pendingApp.statement ||
         "Application awaiting Executive Council review.",
@@ -210,7 +261,7 @@ export function findMemberByEmail(email: string): AxonMember | null {
         ? `https://github.com/${pendingApp.githubUsername}`
         : "",
       githubUsername: pendingApp.githubUsername,
-      linkedin: "",
+      linkedin: pendingApp.linkedin || "",
       email: pendingApp.email,
       graduationYear: 2027,
       internshipAvailable: false,
@@ -229,10 +280,15 @@ export function findMemberByEmail(email: string): AxonMember | null {
 export function createApplication(input: {
   name: string;
   email: string;
+  rollNumber?: string;
+  department?: string;
   university: string;
   roleType: string;
   preferredWing: string;
   githubUsername: string;
+  linkedin?: string;
+  avatarUrl?: string;
+  skillsInput?: string;
   statement: string;
 }): MembershipApplication {
   const db = readDb();
@@ -245,10 +301,15 @@ export function createApplication(input: {
     id: `app-${Date.now()}`,
     name: input.name.trim(),
     email: input.email.trim(),
+    rollNumber: input.rollNumber?.trim() || undefined,
+    department: input.department?.trim() || undefined,
     university: input.university.trim(),
     roleType: input.roleType,
     preferredWing: input.preferredWing,
     githubUsername: cleanGithub || "axon-builder",
+    linkedin: input.linkedin?.trim() || undefined,
+    avatarUrl: input.avatarUrl?.trim() || undefined,
+    skillsInput: input.skillsInput?.trim() || undefined,
     statement: input.statement.trim(),
     status: "Pending",
     submittedAt: new Date().toISOString().split("T")[0],
@@ -266,10 +327,15 @@ export function createApplication(input: {
         id: app.id,
         name: app.name,
         email: app.email,
+        roll_number: app.rollNumber || null,
+        department: app.department || null,
         university: app.university,
         role_type: app.roleType,
         preferred_wing: app.preferredWing,
         github_username: app.githubUsername,
+        linkedin: app.linkedin || null,
+        avatar_url: app.avatarUrl || null,
+        skills_input: app.skillsInput || null,
         statement: app.statement,
         status: "pending",
       })
@@ -286,7 +352,7 @@ export function reviewApplication(input: {
   assignedRole?: PortalRole;
   actorName?: string;
   actorRole?: PortalRole;
-}): MembershipApplication | null {
+}): (MembershipApplication & { issuedInitialPassword?: string }) | null {
   const db = readDb();
   const app = db.applications.find((a) => a.id === input.id);
   if (!app) return null;
@@ -296,6 +362,8 @@ export function reviewApplication(input: {
   if (input.assignedWing) {
     app.preferredWing = input.assignedWing;
   }
+
+  let issuedInitialPassword: string | undefined;
 
   if (input.decision === "Approved") {
     const role: PortalRole = input.assignedRole || "APPROVED_MEMBER";
@@ -316,6 +384,12 @@ export function reviewApplication(input: {
     app.generatedMemberId = memberId;
     app.generatedUsername = baseUsername;
 
+    issuedInitialPassword = deriveInitialPassword(baseUsername, memberId);
+    const parsedSkills = (app.skillsInput || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
     const newMember: AxonMember = {
       username: baseUsername,
       name: app.name,
@@ -333,10 +407,14 @@ export function reviewApplication(input: {
         role === "DIRECTOR" || role === "CO_DIRECTOR" ? "Directorate" : "Member",
       supervisedWings: role === "CORE_LEAD" ? [app.preferredWing] : [],
       reportsTo: wingObj?.reportsTo,
+      passwordHash: hashPassword(issuedInitialPassword),
       rbacRole: role,
       wing: wingName,
       wingId: app.preferredWing,
       chapter: app.university,
+      rollNumber: app.rollNumber,
+      department: app.department,
+      location: "Lahore, Pakistan",
       status:
         role === "SUPER_ADMIN"
           ? "Executive Council"
@@ -345,13 +423,15 @@ export function reviewApplication(input: {
           : role === "CO_DIRECTOR"
           ? "Co-Director"
           : "Active Member",
-      avatar: `/api/avatar?name=${encodeURIComponent(app.name)}&id=${encodeURIComponent(memberId)}`,
+      avatar:
+        app.avatarUrl ||
+        `/api/avatar?name=${encodeURIComponent(app.name)}&id=${encodeURIComponent(memberId)}`,
       bio:
         app.statement ||
         `Inducted member of AXON ${wingName} (${app.university}).`,
       github: `https://github.com/${app.githubUsername}`,
       githubUsername: app.githubUsername,
-      linkedin: "",
+      linkedin: app.linkedin || "",
       email: app.email,
       graduationYear: 2027,
       internshipAvailable: true,
@@ -360,14 +440,22 @@ export function reviewApplication(input: {
       portfolioViews: 1,
       education: [
         {
-          degree: "B.Sc. Engineering & Technology",
+          degree: app.department
+            ? `B.Sc. ${app.department}`
+            : "B.Sc. Engineering & Technology",
           institution: app.university,
           period: "2023 – 2027",
         },
       ],
       skills: {
-        languages: ["TypeScript", "Python", "C++"],
-        frameworks: ["Next.js", "React"],
+        languages:
+          parsedSkills.length > 0
+            ? parsedSkills.slice(0, 6)
+            : ["TypeScript", "Python", "C++"],
+        frameworks:
+          parsedSkills.length > 6
+            ? parsedSkills.slice(6, 12)
+            : ["Next.js", "React"],
         systems: ["Git", "Linux", "PostgreSQL"],
       },
       timeline: [
@@ -407,7 +495,9 @@ export function reviewApplication(input: {
     );
   }
 
-  return app;
+  return issuedInitialPassword
+    ? { ...app, issuedInitialPassword }
+    : app;
 }
 
 // Strict Section D.3 Policy: ALL member projects start as "Under Review" and require SUPER_ADMIN approval!
@@ -571,6 +661,9 @@ export function createEventProposal(
     speakerOrg: string;
     description: string;
     curriculum: string[];
+    posterImage?: string;
+    externalRegistrationUrl?: string;
+    schedule?: EventScheduleItem[];
   },
   autoPublish = false
 ): AxonEvent {
@@ -593,6 +686,9 @@ export function createEventProposal(
     capacity: input.capacity,
     attendeeCount: 0,
     submittedBy,
+    posterImage: input.posterImage || "/assets/poster-launch.png",
+    externalRegistrationUrl: input.externalRegistrationUrl || undefined,
+    schedule: input.schedule?.length ? input.schedule : undefined,
     speaker: {
       name: input.speakerName,
       title: input.speakerTitle,
@@ -780,10 +876,17 @@ export function verifyCredentialQuery(query: string): VerifiedCertificate | null
 export function updateMemberPortfolio(
   username: string,
   patch: {
+    name?: string;
     headline?: string;
     bio?: string;
+    location?: string;
+    department?: string;
+    rollNumber?: string;
     githubUsername?: string;
     linkedin?: string;
+    xHandle?: string;
+    instagram?: string;
+    website?: string;
     avatar?: string;
     resumeUrl?: string;
     graduationYear?: number;
@@ -795,20 +898,32 @@ export function updateMemberPortfolio(
       frameworks: string[];
       systems: string[];
     };
+    education?: AxonMember["education"];
+    timeline?: AxonMember["timeline"];
   }
 ): AxonMember | null {
   const db = readDb();
-  const member = db.members[username.toLowerCase()];
+  const key = username.toLowerCase();
+  const member = db.members[key];
   if (!member) return null;
 
+  if (patch.name !== undefined && patch.name.trim()) {
+    member.name = patch.name.trim();
+  }
   if (patch.headline !== undefined) member.headline = patch.headline.trim();
   if (patch.bio !== undefined) member.bio = patch.bio.trim();
+  if (patch.location !== undefined) member.location = patch.location.trim();
+  if (patch.department !== undefined) member.department = patch.department.trim();
+  if (patch.rollNumber !== undefined) member.rollNumber = patch.rollNumber.trim();
   if (patch.githubUsername !== undefined) {
     const clean = patch.githubUsername.replace(/^@/, "").trim();
     member.githubUsername = clean;
     member.github = clean ? `https://github.com/${clean}` : "";
   }
   if (patch.linkedin !== undefined) member.linkedin = patch.linkedin.trim();
+  if (patch.xHandle !== undefined) member.xHandle = patch.xHandle.trim();
+  if (patch.instagram !== undefined) member.instagram = patch.instagram.trim();
+  if (patch.website !== undefined) member.website = patch.website.trim();
   if (patch.avatar !== undefined) member.avatar = patch.avatar.trim();
   if (patch.resumeUrl !== undefined) member.resumeUrl = patch.resumeUrl.trim();
   if (patch.graduationYear !== undefined)
@@ -819,6 +934,16 @@ export function updateMemberPortfolio(
     member.themePreference = patch.themePreference;
   if (patch.isPublic !== undefined) member.isPublic = patch.isPublic;
   if (patch.skills !== undefined) member.skills = patch.skills;
+  if (patch.education !== undefined) member.education = patch.education;
+  if (patch.timeline !== undefined) member.timeline = patch.timeline;
+
+  // Sync display name / avatar onto authored projects
+  for (const proj of db.projects) {
+    if (proj.author.username === key) {
+      proj.author.name = member.name;
+      proj.author.avatar = member.avatar;
+    }
+  }
 
   writeDb(db);
   return member;
@@ -926,4 +1051,310 @@ export function createInquiryRecord(input: {
   db.inquiries.unshift(inquiry);
   writeDb(db);
   return inquiry;
+}
+
+export function setMemberPasswordHash(
+  username: string,
+  newPlainPassword: string,
+  actorName: string,
+  actorRole: PortalRole
+): SafeSessionMember | null {
+  const db = readDb();
+  const key = username.toLowerCase();
+  const member = db.members[key];
+  if (!member) return null;
+
+  member.passwordHash = hashPassword(newPlainPassword);
+  writeDb(db);
+
+  appendAuditLog(
+    actorName,
+    actorRole,
+    "PASSWORD_RESET_BY_SUPER_ADMIN",
+    `${member.name} (@${member.username} / ${member.email})`
+  );
+
+  return sanitizeSessionMember(member);
+}
+
+export function moderateFinanceRecord(
+  id: string,
+  status: FinanceRecord["status"],
+  actorName?: string,
+  actorRole?: PortalRole
+): FinanceRecord | null {
+  const db = readDb();
+  const record = db.financeRecords.find((f) => f.id === id);
+  if (!record) return null;
+
+  record.status = status;
+  writeDb(db);
+
+  if (actorName && actorRole) {
+    appendAuditLog(
+      actorName,
+      actorRole,
+      `FINANCE_${status.toUpperCase().replace(/\s+/g, "_")}`,
+      `${record.title} (PKR ${record.amountPkr.toLocaleString()})`
+    );
+  }
+  return record;
+}
+
+export function paginateItems<T>(
+  items: T[],
+  page = 1,
+  limit = 12
+): PaginatedResult<T> {
+  const safeLimit = Math.max(1, Math.min(50, limit));
+  const total = items.length;
+  const totalPages = Math.max(1, Math.ceil(total / safeLimit));
+  const safePage = Math.max(1, Math.min(totalPages, page));
+  const start = (safePage - 1) * safeLimit;
+  return {
+    items: items.slice(start, start + safeLimit),
+    total,
+    page: safePage,
+    limit: safeLimit,
+    totalPages,
+  };
+}
+
+export function queryTalentDirectory(opts: {
+  q?: string;
+  wing?: string;
+  internshipOnly?: boolean;
+  page?: number;
+  limit?: number;
+}): PaginatedResult<PublicAxonMember> {
+  const q = (opts.q || "").trim().toLowerCase();
+  const wing = (opts.wing || "all").trim().toLowerCase();
+
+  let list = getPublicMembers();
+  if (wing !== "all") {
+    list = list.filter((m) => m.wingId.toLowerCase() === wing);
+  }
+  if (opts.internshipOnly) {
+    list = list.filter((m) => m.internshipAvailable);
+  }
+  if (q) {
+    list = list.filter((m) => {
+      const hay = [
+        m.name,
+        m.username,
+        m.memberId,
+        m.designation,
+        m.wing,
+        m.headline,
+        m.department || "",
+        ...m.skills.languages,
+        ...m.skills.frameworks,
+        ...m.skills.systems,
+      ]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  return paginateItems(list.map(sanitizePublicMember), opts.page, opts.limit);
+}
+
+export function queryCertificates(opts: {
+  q?: string;
+  type?: string;
+  status?: string;
+  page?: number;
+  limit?: number;
+}): PaginatedResult<VerifiedCertificate> {
+  const db = readDb();
+  const q = (opts.q || "").trim().toLowerCase();
+  const type = (opts.type || "all").trim().toLowerCase();
+  const status = (opts.status || "all").trim().toLowerCase();
+
+  let list = [...db.certificates];
+  if (type !== "all") {
+    list = list.filter((c) => c.type.toLowerCase() === type);
+  }
+  if (status !== "all") {
+    list = list.filter((c) => c.status.toLowerCase() === status);
+  }
+  if (q) {
+    list = list.filter(
+      (c) =>
+        c.certCode.toLowerCase().includes(q) ||
+        c.recipientName.toLowerCase().includes(q) ||
+        (c.memberId && c.memberId.toLowerCase().includes(q)) ||
+        c.eventOrRole.toLowerCase().includes(q)
+    );
+  }
+
+  return paginateItems(list, opts.page, opts.limit);
+}
+
+export function queryEvents(opts: {
+  q?: string;
+  category?: string;
+  wing?: string;
+  includeUnapproved?: boolean;
+  page?: number;
+  limit?: number;
+}): PaginatedResult<AxonEvent> {
+  const db = readDb();
+  const q = (opts.q || "").trim().toLowerCase();
+  const category = (opts.category || "all").trim().toLowerCase();
+  const wing = (opts.wing || "all").trim().toLowerCase();
+
+  let list = opts.includeUnapproved
+    ? [...db.events]
+    : db.events.filter(
+        (e) => e.status !== "Pending Approval" && e.status !== "Rejected"
+      );
+
+  if (category !== "all") {
+    list = list.filter((e) => e.category.toLowerCase() === category);
+  }
+  if (wing !== "all") {
+    list = list.filter((e) => e.wingId.toLowerCase() === wing);
+  }
+  if (q) {
+    list = list.filter((e) =>
+      [e.title, e.description, e.location, e.speaker.name, e.wingId]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    );
+  }
+
+  return paginateItems(list, opts.page, opts.limit);
+}
+
+export function queryProjects(opts: {
+  q?: string;
+  wing?: string;
+  includeUnapproved?: boolean;
+  page?: number;
+  limit?: number;
+}): PaginatedResult<Project> {
+  const db = readDb();
+  const q = (opts.q || "").trim().toLowerCase();
+  const wing = (opts.wing || "all").trim().toLowerCase();
+
+  let list = opts.includeUnapproved
+    ? [...db.projects]
+    : db.projects.filter((p) => p.status === "Verified & Active");
+
+  if (wing !== "all") {
+    list = list.filter((p) => p.wingId.toLowerCase() === wing);
+  }
+  if (q) {
+    list = list.filter((p) =>
+      [
+        p.title,
+        p.summary,
+        p.author.name,
+        p.primaryLanguage || "",
+        ...p.techStack,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    );
+  }
+
+  return paginateItems(list, opts.page, opts.limit);
+}
+
+export function queryApplications(opts: {
+  q?: string;
+  status?: string;
+  page?: number;
+  limit?: number;
+}): PaginatedResult<MembershipApplication> {
+  const db = readDb();
+  const q = (opts.q || "").trim().toLowerCase();
+  const status = (opts.status || "all").trim().toLowerCase();
+
+  let list = [...db.applications];
+  if (status !== "all") {
+    list = list.filter((a) => a.status.toLowerCase() === status);
+  }
+  if (q) {
+    list = list.filter((a) =>
+      [
+        a.name,
+        a.email,
+        a.university,
+        a.preferredWing,
+        a.rollNumber || "",
+        a.department || "",
+        a.githubUsername,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    );
+  }
+
+  return paginateItems(list, opts.page, opts.limit);
+}
+
+export function getUpcomingPublishedEvents(): AxonEvent[] {
+  const db = readDb();
+  return db.events.filter(
+    (e) => e.status === "Registrations Open" || e.status === "Scheduled"
+  );
+}
+
+export async function getDashboardBundle(session: SessionUser) {
+  const [memberRaw, dbState] = await Promise.all([
+    Promise.resolve(
+      getMemberByUsername(session.username) || findMemberByEmail(session.email)
+    ),
+    Promise.resolve(readDb()),
+  ]);
+
+  const [myProjects, myBlogs, myCertificates, myEndorsements, myRsvps, upcomingEvents] =
+    await Promise.all([
+      Promise.resolve(
+        dbState.projects.filter(
+          (p) => p.author.username === session.username.toLowerCase()
+        )
+      ),
+      Promise.resolve(
+        dbState.blogs.filter(
+          (b) => b.author.username === session.username.toLowerCase()
+        )
+      ),
+      Promise.resolve(
+        dbState.certificates.filter(
+          (c) =>
+            c.memberId === session.memberId ||
+            c.recipientName.toLowerCase() === session.name.toLowerCase()
+        )
+      ),
+      Promise.resolve(
+        dbState.endorsements.filter(
+          (e) => e.recipientUsername === session.username.toLowerCase()
+        )
+      ),
+      Promise.resolve(
+        dbState.rsvps.filter(
+          (r) =>
+            r.email.toLowerCase() === session.email.toLowerCase() ||
+            r.memberId === session.memberId
+        )
+      ),
+      Promise.resolve(getUpcomingPublishedEvents()),
+    ]);
+
+  return {
+    member: memberRaw ? sanitizeSessionMember(memberRaw) : null,
+    myProjects,
+    myBlogs,
+    myCertificates,
+    myEndorsements,
+    myRsvps,
+    upcomingEvents,
+  };
 }

@@ -1,5 +1,5 @@
 -- AXON Web Portal (askme.pk) — Complete Production PostgreSQL / Supabase Migration Schema
--- Aligned with Master Production Specification (Sections A, C & D)
+-- Includes PostgreSQL indexes, explicit projections, Supavisor connection pooling compatibility & job queue
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
@@ -27,6 +27,7 @@ CREATE TABLE public.users (
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
   username TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
   role portal_role NOT NULL DEFAULT 'PENDING_APPLICANT',
   status user_status NOT NULL DEFAULT 'pending',
   designation TEXT NOT NULL DEFAULT 'Member',
@@ -36,6 +37,9 @@ CREATE TABLE public.users (
   supervised_wings TEXT[] NOT NULL DEFAULT '{}',
   reports_to TEXT,
   university_chapter TEXT NOT NULL DEFAULT 'IMAC, UET Lahore',
+  roll_number TEXT,
+  department TEXT,
+  location TEXT DEFAULT 'Lahore, Pakistan',
   axon_member_id TEXT UNIQUE, -- Format: AXN-26-XXX
   github_username TEXT,
   avatar_url TEXT,
@@ -93,7 +97,7 @@ CREATE TABLE public.blogs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 5. events (Core Team creates/submits -> SUPER_ADMIN approves)
+-- 5. events (Core Team creates/submits -> SUPER_ADMIN approves -> Live Visitor Banner + Dedicated Page)
 CREATE TABLE public.events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   slug TEXT UNIQUE NOT NULL,
@@ -107,6 +111,9 @@ CREATE TABLE public.events (
   capacity INTEGER NOT NULL DEFAULT 200,
   attendee_count INTEGER NOT NULL DEFAULT 0,
   submitted_by TEXT NOT NULL,
+  poster_image TEXT,
+  external_registration_url TEXT,
+  schedule JSONB NOT NULL DEFAULT '[]',
   speaker_name TEXT NOT NULL,
   speaker_title TEXT NOT NULL,
   speaker_org TEXT NOT NULL,
@@ -143,15 +150,19 @@ CREATE TABLE public.certificates (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 7. applications, endorsements, inquiries, tasks, finance, audit_logs
+-- 7. applications, endorsements, inquiries, tasks, finance, audit_logs, background_jobs
 CREATE TABLE public.applications (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   email TEXT NOT NULL,
+  roll_number TEXT,
+  department TEXT,
   university TEXT NOT NULL,
   role_type TEXT NOT NULL,
   preferred_wing TEXT NOT NULL,
   github_username TEXT,
+  linkedin TEXT,
+  avatar_url TEXT,
   statement TEXT NOT NULL,
   status user_status NOT NULL DEFAULT 'pending',
   assigned_role portal_role,
@@ -210,6 +221,40 @@ CREATE TABLE public.audit_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE public.background_jobs (
+  id TEXT PRIMARY KEY,
+  job_type TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued',
+  summary TEXT NOT NULL,
+  processed_count INTEGER DEFAULT 0,
+  total_count INTEGER DEFAULT 0,
+  last_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at TIMESTAMPTZ
+);
+
+-- Production PostgreSQL Performance Indexes on frequently queried columns
+CREATE INDEX idx_users_email ON public.users (LOWER(email));
+CREATE INDEX idx_users_member_id ON public.users (axon_member_id);
+CREATE INDEX idx_users_username ON public.users (LOWER(username));
+CREATE INDEX idx_users_wing_role ON public.users (wing_id, role);
+
+CREATE INDEX idx_certificates_cert_code ON public.certificates (cert_code);
+CREATE INDEX idx_certificates_member_id ON public.certificates (member_id);
+CREATE INDEX idx_certificates_recipient ON public.certificates (LOWER(recipient_name));
+
+CREATE INDEX idx_projects_slug ON public.projects (slug);
+CREATE INDEX idx_projects_status_wing ON public.projects (approval_status, wing_id);
+
+CREATE INDEX idx_blogs_slug ON public.blogs (slug);
+CREATE INDEX idx_blogs_status ON public.blogs (status, published_at DESC);
+
+CREATE INDEX idx_events_slug ON public.events (slug);
+CREATE INDEX idx_events_status_date ON public.events (status, event_date);
+
+CREATE INDEX idx_applications_email ON public.applications (LOWER(email));
+CREATE INDEX idx_applications_status_submitted ON public.applications (status, submitted_at DESC);
+
 -- Enable Row-Level Security (RLS)
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.portfolios ENABLE ROW LEVEL SECURITY;
@@ -221,7 +266,7 @@ ALTER TABLE public.endorsements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.finance_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
--- Public Read Policies (Strictly hide internal reports_to via public views/API projections)
+-- Public Read Policies (Strictly hide password_hash & reports_to via safe projections)
 CREATE POLICY "Public portfolios readable" ON public.portfolios FOR SELECT USING (is_public = TRUE);
 CREATE POLICY "Verified projects readable" ON public.projects FOR SELECT USING (approval_status = 'verified_active');
 CREATE POLICY "Published blogs readable" ON public.blogs FOR SELECT USING (status = 'published');
@@ -238,8 +283,13 @@ CREATE POLICY "Super Admin controls blogs" ON public.blogs FOR ALL USING (
 CREATE POLICY "Super Admin controls events" ON public.events FOR ALL USING (
   EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'SUPER_ADMIN')
 );
+CREATE POLICY "Super Admin manages users" ON public.users FOR ALL USING (
+  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'SUPER_ADMIN')
+);
 
--- Supabase Storage Buckets (Run once in Supabase SQL Editor)
+-- Supabase Storage Buckets
 INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', true) ON CONFLICT DO NOTHING;
+INSERT INTO storage.buckets (id, name, public) VALUES ('onboarding-avatars', 'onboarding-avatars', true) ON CONFLICT DO NOTHING;
 INSERT INTO storage.buckets (id, name, public) VALUES ('project-covers', 'project-covers', true) ON CONFLICT DO NOTHING;
+INSERT INTO storage.buckets (id, name, public) VALUES ('event-posters', 'event-posters', true) ON CONFLICT DO NOTHING;
 INSERT INTO storage.buckets (id, name, public) VALUES ('resumes', 'resumes', true) ON CONFLICT DO NOTHING;

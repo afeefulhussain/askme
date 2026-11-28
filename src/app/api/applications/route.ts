@@ -1,13 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { canAccessAdmin, getServerSession, isSuperAdmin } from "@/lib/auth";
-import { createApplication, readDb, reviewApplication } from "@/lib/db";
+import {
+  canAccessAdmin,
+  canApproveApplications,
+  getServerSession,
+  isSuperAdmin,
+} from "@/lib/auth";
+import {
+  createApplication,
+  paginateItems,
+  readDb,
+  reviewApplication,
+} from "@/lib/db";
 import { sendOnboardingWelcomeEmail } from "@/lib/email";
+import { enqueueEmailDispatchJob } from "@/lib/jobs";
 import type { PortalRole } from "@/lib/types";
 import { applicationReviewSchema, applicationSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = getServerSession();
   if (!session || !canAccessAdmin(session.rbacRole)) {
     return NextResponse.json(
@@ -15,6 +26,12 @@ export async function GET() {
       { status: 403 }
     );
   }
+
+  const params = req.nextUrl.searchParams;
+  const q = (params.get("q") || "").trim().toLowerCase();
+  const status = (params.get("status") || "all").trim().toLowerCase();
+  const page = Number(params.get("page") || "1") || 1;
+  const limit = Number(params.get("limit") || "10") || 10;
 
   const db = readDb();
   let apps = db.applications;
@@ -28,7 +45,26 @@ export async function GET() {
     }
   }
 
-  return NextResponse.json({ applications: apps });
+  if (status !== "all") {
+    apps = apps.filter((a) => a.status.toLowerCase() === status);
+  }
+  if (q) {
+    apps = apps.filter((a) =>
+      [a.name, a.email, a.university, a.preferredWing, a.rollNumber || "", a.department || ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    );
+  }
+
+  const paged = paginateItems(apps, page, limit);
+  return NextResponse.json({
+    applications: paged.items,
+    total: paged.total,
+    page: paged.page,
+    limit: paged.limit,
+    totalPages: paged.totalPages,
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -50,10 +86,15 @@ export async function POST(req: NextRequest) {
     const app = createApplication({
       name: d.name,
       email: d.email,
+      rollNumber: d.rollNumber,
+      department: d.department,
       university: d.university,
       roleType: d.roleType,
       preferredWing: d.preferredWing || "technical",
       githubUsername: d.githubUsername || "",
+      linkedin: d.linkedin,
+      avatarUrl: d.avatarUrl,
+      skillsInput: d.skillsInput,
       statement: d.statement,
     });
 
@@ -68,11 +109,11 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const session = getServerSession();
-  if (!session || !canAccessAdmin(session.rbacRole)) {
+  if (!session || !canApproveApplications(session.rbacRole)) {
     return NextResponse.json(
       {
         error:
-          "Unauthorized: Executive Council or Wing Directorate access required.",
+          "Access Denied: All membership approvals and official wing/role appointments are routed exclusively to the Super Admin (President).",
       },
       { status: 403 }
     );
@@ -101,33 +142,12 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    if (!isSuperAdmin(session.rbacRole)) {
-      const allowed =
-        session.rbacRole === "CORE_LEAD"
-          ? session.supervisedWings.includes(target.preferredWing)
-          : target.preferredWing === session.wingId;
-      if (!allowed) {
-        return NextResponse.json(
-          {
-            error:
-              "You may only review applications assigned to your wing supervision scope.",
-          },
-          { status: 403 }
-        );
-      }
-    }
-
-    const safeRole: PortalRole =
-      isSuperAdmin(session.rbacRole) && parsed.data.assignedRole
-        ? parsed.data.assignedRole
-        : "APPROVED_MEMBER";
+    const safeRole: PortalRole = parsed.data.assignedRole || "APPROVED_MEMBER";
 
     const updated = reviewApplication({
       id: parsed.data.id,
       decision: parsed.data.decision,
-      assignedWing: isSuperAdmin(session.rbacRole)
-        ? parsed.data.assignedWing
-        : target.preferredWing,
+      assignedWing: parsed.data.assignedWing || target.preferredWing,
       assignedRole: safeRole,
       actorName: session.name,
       actorRole: session.rbacRole,
@@ -139,13 +159,19 @@ export async function PATCH(req: NextRequest) {
       updated.generatedMemberId &&
       updated.generatedUsername
     ) {
-      await sendOnboardingWelcomeEmail({
-        email: updated.email,
-        name: updated.name,
-        memberId: updated.generatedMemberId,
-        wingName: updated.preferredWing,
-        username: updated.generatedUsername,
-      });
+      const issuedPassword = updated.issuedInitialPassword;
+      enqueueEmailDispatchJob(
+        `Welcome email -> ${updated.email} (${updated.generatedMemberId})`,
+        () =>
+          sendOnboardingWelcomeEmail({
+            email: updated.email,
+            name: updated.name,
+            memberId: updated.generatedMemberId!,
+            wingName: updated.preferredWing,
+            username: updated.generatedUsername!,
+            initialPassword: issuedPassword,
+          })
+      );
     }
 
     return NextResponse.json({ application: updated });

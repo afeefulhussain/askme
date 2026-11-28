@@ -2,6 +2,7 @@ import React from "react";
 import type { Metadata } from "next";
 import { WINGS } from "@/data/axonData";
 import { getPublicMembers } from "@/lib/db";
+import { sanitizePublicMember } from "@/lib/rbac";
 import TalentDirectoryClient from "@/components/TalentDirectoryClient";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,7 @@ export const metadata: Metadata = {
 };
 
 export default function TalentPage() {
-  const members = getPublicMembers();
+  const members = getPublicMembers().map(sanitizePublicMember);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">

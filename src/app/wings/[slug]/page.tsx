@@ -84,13 +84,13 @@ export default function WingDetailPage({ params }: PageProps) {
             <ArrowUpRight className="w-4 h-4" />
           </Link>
           <Link
-            href={`/u/${wing.leadUsername}`}
+            href={`/portfolio/${wing.leadUsername}`}
             className="px-5 py-3 bg-void-card border border-void-border text-slate-200 hover:border-cyan-axon rounded transition-colors"
           >
             Director: {wing.lead} →
           </Link>
           <Link
-            href={`/u/${wing.coLeadUsername}`}
+            href={`/portfolio/${wing.coLeadUsername}`}
             className="px-5 py-3 bg-void-card border border-void-border text-slate-200 hover:border-cyan-axon rounded transition-colors"
           >
             Co-Director: {wing.coLead} →

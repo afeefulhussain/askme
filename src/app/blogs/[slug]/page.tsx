@@ -66,7 +66,7 @@ export default function BlogDetailPage({ params }: PageProps) {
 
         <div className="mt-6 pt-4 border-t border-void-border/60 flex items-center gap-3 font-mono text-xs">
           <Link
-            href={`/u/${post.author.username}`}
+            href={`/portfolio/${post.author.username}`}
             className="flex items-center gap-2 text-white hover:text-cyan-axon"
           >
             <span className="font-semibold">{post.author.name}</span>
@@ -93,7 +93,7 @@ export default function BlogDetailPage({ params }: PageProps) {
         </div>
 
         <Link
-          href={`/u/${post.author.username}`}
+          href={`/portfolio/${post.author.username}`}
           className="px-4 py-2 bg-void-subtle border border-void-border hover:border-cyan-axon text-cyan-axon rounded transition-colors"
         >
           View Author Portfolio & Projects

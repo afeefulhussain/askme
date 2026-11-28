@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Users, Zap } from "lucide-react";
 import type { SessionUser } from "@/lib/types";
@@ -46,8 +46,12 @@ export default function EventRsvpPanel({
       .catch(() => {});
   }, [eventSlug]);
 
+  const submitLockRef = useRef(false);
+
   const submitRsvp = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
     setSubmitting(true);
     setError(null);
 
@@ -75,6 +79,7 @@ export default function EventRsvpPanel({
     } catch {
       setError("Network error while reserving seat.");
     } finally {
+      submitLockRef.current = false;
       setSubmitting(false);
     }
   };

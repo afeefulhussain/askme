@@ -1,4 +1,5 @@
 import React from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -190,7 +191,7 @@ export default function HomePage() {
 
                 <div className="mt-6 pt-4 border-t border-void-border/60 flex items-center justify-between text-xs font-mono">
                   <Link
-                    href={`/u/${wing.leadUsername}`}
+                    href={`/portfolio/${wing.leadUsername}`}
                     className="text-slate-400 hover:text-white"
                   >
                     Dir: {wing.lead}
@@ -367,14 +368,15 @@ export default function HomePage() {
 
                 <div className="pt-4 border-t border-void-border/70 flex items-center justify-between text-xs font-mono">
                   <Link
-                    href={`/u/${project.author.username}`}
+                    href={`/portfolio/${project.author.username}`}
                     className="flex items-center gap-2 text-slate-300 hover:text-white"
                   >
-                    <img
+                    <Image
                       src={project.author.avatar}
                       alt={project.author.name}
                       width={20}
                       height={20}
+                      loading="lazy"
                       className="w-5 h-5 rounded-full object-cover"
                     />
                     <span>{project.author.name}</span>
@@ -487,7 +489,7 @@ export default function HomePage() {
 
               <div className="mt-6 pt-4 border-t border-void-border/60 flex items-center justify-between font-mono text-xs">
                 <Link
-                  href={`/u/${post.author.username}`}
+                  href={`/portfolio/${post.author.username}`}
                   className="text-slate-300 hover:text-cyan-axon"
                 >
                   By {post.author.name} ({post.author.role.split(",")[0]})

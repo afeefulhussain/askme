@@ -8,10 +8,14 @@ export {
   canSubmitBlogs,
   canAccessAdmin,
   isSuperAdmin,
+  canResetPasswords,
+  canApproveApplications,
   canCreateEventProposal,
   canApproveEventsAndContent,
   canUploadCertificateCsv,
   canViewFinanceAndAudit,
+  sanitizePublicMember,
+  sanitizeSessionMember,
   formatRbacLabel,
 } from "@/lib/rbac";
 
@@ -22,6 +26,50 @@ function getSecret(): string {
     process.env.AXON_SESSION_SECRET ||
     "axon-imac-uet-lahore-dev-secret-change-in-production"
   );
+}
+
+export function hashPassword(plainPassword: string, customSalt?: string): string {
+  const salt = customSalt || crypto.randomBytes(16).toString("hex");
+  const derived = crypto.scryptSync(plainPassword, salt, 64).toString("hex");
+  return `${salt}:${derived}`;
+}
+
+export function verifyPassword(
+  plainPassword: string,
+  storedHash?: string
+): boolean {
+  if (!storedHash || !storedHash.includes(":")) return false;
+  const [salt, expectedHex] = storedHash.split(":");
+  if (!salt || !expectedHex) return false;
+
+  try {
+    const derived = crypto.scryptSync(plainPassword, salt, 64);
+    const expected = Buffer.from(expectedHex, "hex");
+    return (
+      derived.length === expected.length &&
+      crypto.timingSafeEqual(derived, expected)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Deterministic unique initial credential derived from name + memberId.
+ * All 29 council/directorate members receive an @askme.pk ID + unique initial password.
+ * Only SUPER_ADMIN can reset or rotate any user's password after seeding.
+ */
+export function deriveInitialPassword(
+  username: string,
+  memberId: string
+): string {
+  const cleanName = username
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(0, 12);
+  const capped =
+    cleanName.charAt(0).toUpperCase() + cleanName.slice(1).toLowerCase();
+  const suffix = memberId.split("-").pop() || "2026";
+  return `Axon!${capped}#${suffix}`;
 }
 
 export function generateSixDigitOtp(): string {

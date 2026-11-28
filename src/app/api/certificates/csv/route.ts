@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { canUploadCertificateCsv, getServerSession } from "@/lib/auth";
-import { bulkIssueCertificates } from "@/lib/db";
+import { enqueueBulkCertificateImportJob } from "@/lib/jobs";
 import type { VerifiedCertificate } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -176,15 +176,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const certificates = bulkIssueCertificates(
+    const { job, previewCount } = enqueueBulkCertificateImportJob(
       rows,
       session.name,
       session.rbacRole
     );
 
     return NextResponse.json(
-      { count: certificates.length, certificates },
-      { status: 201 }
+      {
+        queued: true,
+        count: previewCount,
+        job,
+        message: `Queued ${previewCount} certificate records for background processing (${job.id}).`,
+      },
+      { status: 202 }
     );
   } catch {
     return NextResponse.json(

@@ -82,7 +82,7 @@ export default function WingsPage() {
                   WING LEADERSHIP
                 </div>
                 <Link
-                  href={`/u/${wing.leadUsername}`}
+                  href={`/portfolio/${wing.leadUsername}`}
                   className="block hover:text-cyan-axon transition-colors"
                 >
                   <div className="text-[10px] text-cyan-axon uppercase">
@@ -93,7 +93,7 @@ export default function WingsPage() {
                   </div>
                 </Link>
                 <Link
-                  href={`/u/${wing.coLeadUsername}`}
+                  href={`/portfolio/${wing.coLeadUsername}`}
                   className="block pt-2 border-t border-void-border/50 hover:text-cyan-axon transition-colors"
                 >
                   <div className="text-[10px] text-slate-400 uppercase">

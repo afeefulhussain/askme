@@ -6,7 +6,13 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_BUCKETS = new Set(["avatars", "project-covers", "resumes"]);
+const ALLOWED_BUCKETS = new Set([
+  "avatars",
+  "project-covers",
+  "resumes",
+  "event-posters",
+  "onboarding-avatars",
+]);
 const IMAGE_TYPES = new Set([
   "image/png",
   "image/jpeg",
@@ -30,15 +36,6 @@ function getSafeExtension(mimeType: string, originalName: string): string {
 
 export async function POST(req: NextRequest) {
   const session = getServerSession();
-  if (!session || !canAccessDashboard(session.rbacRole)) {
-    return NextResponse.json(
-      {
-        error:
-          "Access Denied: Only approved AXON members may upload media or resumes.",
-      },
-      { status: 403 }
-    );
-  }
 
   try {
     const formData = await req.formData();
@@ -52,6 +49,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const isPublicOnboarding = bucket === "onboarding-avatars";
+    if (!isPublicOnboarding && (!session || !canAccessDashboard(session.rbacRole))) {
+      return NextResponse.json(
+        {
+          error:
+            "Access Denied: Only approved AXON members may upload media or resumes.",
+        },
+        { status: 403 }
+      );
+    }
+
     if (!(file instanceof File)) {
       return NextResponse.json(
         { error: "File payload is required." },
@@ -59,9 +67,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (file.size <= 0 || file.size > MAX_BYTES) {
+    const maxAllowed = isPublicOnboarding ? 2 * 1024 * 1024 : MAX_BYTES;
+    if (file.size <= 0 || file.size > maxAllowed) {
       return NextResponse.json(
-        { error: "File size must be between 1 byte and 5 MB." },
+        {
+          error: isPublicOnboarding
+            ? "Profile photo must be between 1 byte and 2 MB."
+            : "File size must be between 1 byte and 5 MB.",
+        },
         { status: 400 }
       );
     }
@@ -69,6 +82,10 @@ export async function POST(req: NextRequest) {
     const validMime =
       bucket === "resumes"
         ? RESUME_TYPES.has(file.type)
+        : isPublicOnboarding
+        ? file.type === "image/png" ||
+          file.type === "image/jpeg" ||
+          file.type === "image/webp"
         : IMAGE_TYPES.has(file.type);
     if (!validMime) {
       return NextResponse.json(
@@ -82,13 +99,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const ownerPrefix = session?.username || "applicant";
     const ext = getSafeExtension(file.type, file.name);
-    const filename = `${session.username}-${Date.now()}${ext}`;
+    const filename = `${ownerPrefix}-${Date.now()}${ext}`;
     const bytes = Buffer.from(await file.arrayBuffer());
 
     const sb = getSupabaseAdmin();
     if (sb) {
-      const storagePath = `${session.username}/${filename}`;
+      const storagePath = `${ownerPrefix}/${filename}`;
       const { error } = await sb.storage
         .from(bucket)
         .upload(storagePath, bytes, {

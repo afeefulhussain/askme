@@ -2,7 +2,7 @@ import React from "react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth";
-import { findMemberByEmail, getMemberByUsername, readDb } from "@/lib/db";
+import { getDashboardBundle } from "@/lib/db";
 import { WINGS } from "@/data/axonData";
 import MemberDashboardClient from "@/components/MemberDashboardClient";
 
@@ -15,40 +15,24 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function MemberDashboardPage() {
+export default async function MemberDashboardPage() {
   const session = getServerSession();
   if (!session) {
     redirect("/login");
   }
 
-  const db = readDb();
-  const member =
-    getMemberByUsername(session.username) || findMemberByEmail(session.email);
+  const bundle = await getDashboardBundle(session);
 
-  if (!member) {
+  if (!bundle.member) {
     redirect("/login");
   }
 
-  const memberProjects = db.projects.filter(
-    (p) => p.author.username.toLowerCase() === member.username.toLowerCase()
-  );
-
-  const memberBlogs = db.blogs.filter(
-    (b) => b.author.username.toLowerCase() === member.username.toLowerCase()
-  );
-
-  const memberCerts = db.certificates.filter(
-    (c) =>
-      c.memberId === member.memberId ||
-      c.recipientName.toLowerCase() === member.name.toLowerCase()
-  );
-
   return (
     <MemberDashboardClient
-      initialMember={member}
-      initialProjects={memberProjects}
-      initialBlogs={memberBlogs}
-      initialCertificates={memberCerts}
+      initialMember={bundle.member}
+      initialProjects={bundle.myProjects}
+      initialBlogs={bundle.myBlogs}
+      initialCertificates={bundle.myCertificates}
       wings={WINGS}
     />
   );

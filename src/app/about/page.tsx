@@ -112,7 +112,7 @@ export default function AboutPage() {
                 FACULTY PATRON & INSTITUTIONAL ADVISOR
               </div>
               <Link
-                href={`/u/${patron.username}`}
+                href={`/portfolio/${patron.username}`}
                 className="inline-flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 w-full bg-void-subtle rounded border border-void-border hover:border-circuit-green/60 transition-colors"
               >
                 <div>
@@ -139,7 +139,7 @@ export default function AboutPage() {
               {coreCouncil.map((officer) => (
                 <Link
                   key={officer.username}
-                  href={`/u/${officer.username}`}
+                  href={`/portfolio/${officer.username}`}
                   className="p-4 bg-void-subtle rounded border border-void-border hover:border-cyan-axon/50 transition-colors"
                 >
                   <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 mb-1">
@@ -181,7 +181,7 @@ export default function AboutPage() {
                   </div>
                   <div className="space-y-1.5 border-t border-void-border/50 pt-2.5 text-[11px]">
                     <Link
-                      href={`/u/${wing.leadUsername}`}
+                      href={`/portfolio/${wing.leadUsername}`}
                       className="flex items-center justify-between text-slate-200 hover:text-cyan-axon"
                     >
                       <span>{wing.lead}</span>
@@ -190,7 +190,7 @@ export default function AboutPage() {
                       </span>
                     </Link>
                     <Link
-                      href={`/u/${wing.coLeadUsername}`}
+                      href={`/portfolio/${wing.coLeadUsername}`}
                       className="flex items-center justify-between text-slate-300 hover:text-cyan-axon"
                     >
                       <span>{wing.coLead}</span>

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "@/lib/auth";
+import { getServerSession, sanitizeSessionMember } from "@/lib/auth";
 import { getMemberByUsername } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +13,6 @@ export async function GET() {
   return NextResponse.json({
     authenticated: true,
     user: session,
-    member,
+    member: member ? sanitizeSessionMember(member) : null,
   });
 }

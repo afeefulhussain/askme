@@ -400,6 +400,12 @@ function makeMember(params: {
     wing: params.wingName,
     wingId: params.wingId,
     chapter: "IMAC, UET Lahore",
+    rollNumber: `2023-AXN-${params.memberId.split("-").pop() || "000"}`,
+    department:
+      params.category === "Patron"
+        ? "Faculty Advisory — IMAC, UET Lahore"
+        : "IMAC & Computing Sciences",
+    location: "Lahore, Pakistan",
     status:
       params.category === "Patron"
         ? "Faculty Patron"
@@ -918,6 +924,13 @@ export const EVENTS: AxonEvent[] = [
     capacity: 600,
     attendeeCount: 640,
     submittedBy: "Afeef Ul Hussain",
+    posterImage: "/assets/poster-hardware.png",
+    externalRegistrationUrl: "https://askme.pk/events/zeros-and-ones",
+    schedule: [
+      { time: "18:00 PKT", topic: "CMOS Switching & Propagation Delay Fundamentals", speaker: "Arham" },
+      { time: "19:00 PKT", topic: "Synthesizable Verilog & FSM Design Patterns", speaker: "Arham" },
+      { time: "20:15 PKT", topic: "Open-Source FPGA Bitstream Lab & Q&A", speaker: "Shahid" },
+    ],
     speaker: {
       name: "Arham",
       title: "Director of Technical Wing",
@@ -947,6 +960,13 @@ export const EVENTS: AxonEvent[] = [
     capacity: 500,
     attendeeCount: 412,
     submittedBy: "Wajiha",
+    posterImage: "/assets/poster-launch.png",
+    externalRegistrationUrl: "https://askme.pk/events/axon-portal-launch-symposium",
+    schedule: [
+      { time: "14:00 PKT", topic: "Keynote: Together We Transmit Charter & Ecosystem", speaker: "Afeef Ul Hussain" },
+      { time: "15:00 PKT", topic: "Live Demo: Cryptographic Verification & Dynamic Portfolios", speaker: "Arham" },
+      { time: "16:15 PKT", topic: "11-Directorate Showcase Booths & Fellowship Desk", speaker: "Wajiha" },
+    ],
     speaker: {
       name: "Afeef Ul Hussain",
       title: "President, AXON",
@@ -977,6 +997,13 @@ export const EVENTS: AxonEvent[] = [
     capacity: 500,
     attendeeCount: 520,
     submittedBy: "Wajiha",
+    posterImage: "/assets/poster-systems.png",
+    externalRegistrationUrl: "https://meet.askme.pk/distributed-systems",
+    schedule: [
+      { time: "19:00 PKT", topic: "Next.js App Router, Zod Validation & Connection Pooling", speaker: "Shahid" },
+      { time: "20:00 PKT", topic: "PostgreSQL RLS & Cryptographic OTP Security", speaker: "Arham" },
+      { time: "21:00 PKT", topic: "Edge DNS Deployment & Production Q&A", speaker: "Shahid" },
+    ],
     speaker: {
       name: "Shahid",
       title: "Co-Director of Technical Wing",
@@ -1007,6 +1034,13 @@ export const EVENTS: AxonEvent[] = [
     capacity: 450,
     attendeeCount: 448,
     submittedBy: "Tahoor Tayyab",
+    posterImage: "/assets/poster-design.png",
+    externalRegistrationUrl: "https://askme.pk/events/brand-systems-editorial-ui",
+    schedule: [
+      { time: "15:00 PKT", topic: "High-Contrast Institutional Color & Spacing Systems", speaker: "Tayyab" },
+      { time: "16:15 PKT", topic: "Pairing Geometric Sans with Editorial Serif Displays", speaker: "Tahoor Tayyab" },
+      { time: "17:15 PKT", topic: "Automated QR Badge & Brand Kit Exporting", speaker: "Tayyab" },
+    ],
     speaker: {
       name: "Tayyab",
       title: "Director of Design",
@@ -1044,6 +1078,7 @@ export const PROJECTS: Project[] = [
     techStack: ["Next.js", "TypeScript", "PostgreSQL", "Supabase", "Zod", "Resend"],
     githubRepo: "https://github.com/afeefulhussain/askme",
     liveDemoUrl: "https://askme.pk",
+    coverImage: "/assets/cover-portal.png",
     stars: 218,
     forks: 42,
     primaryLanguage: "TypeScript",
@@ -1068,6 +1103,7 @@ export const PROJECTS: Project[] = [
       "Zero-copy serialization over memory-mapped SSTable blocks with background level compaction and LZ4 compression.",
     techStack: ["Rust", "LSM Tree", "Bloom Filters", "Tokio", "Linux"],
     githubRepo: "https://github.com/arham/vortex-lsm",
+    coverImage: "/assets/cover-vortex.png",
     stars: 164,
     forks: 27,
     primaryLanguage: "Rust",
@@ -1092,6 +1128,7 @@ export const PROJECTS: Project[] = [
       "Precision geometric SVG primitives adhering strictly to Terminal Void (#0A0D14) and Signal Cyan (#00F0FF / #0284C7) contrast rules.",
     techStack: ["Figma", "SVG Geometry", "Design Tokens", "Print PDF"],
     githubRepo: "https://github.com/tayyab/axon-brand-kit",
+    coverImage: "/assets/cover-design.png",
     stars: 96,
     forks: 18,
     primaryLanguage: "SVG",

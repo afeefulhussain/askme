@@ -1,8 +1,9 @@
 import React from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import Image from "next/image";
 import Link from "next/link";
-import { Calendar, Clock, MapPin, ArrowLeft } from "lucide-react";
+import { Calendar, Clock, MapPin, ArrowLeft, ExternalLink } from "lucide-react";
 import { EVENTS } from "@/data/axonData";
 import { readDb } from "@/lib/db";
 import EventRsvpPanel from "@/components/EventRsvpPanel";
@@ -136,6 +137,19 @@ export default function EventDetailPage({ params }: PageProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
         <div className="lg:col-span-2 space-y-8 font-sans">
+          {event.posterImage && (
+            <div className="relative w-full aspect-[16/10] rounded-xl overflow-hidden border border-void-border bg-void-card">
+              <Image
+                src={event.posterImage}
+                alt={`${event.title} Official Poster`}
+                width={960}
+                height={600}
+                priority
+                className="w-full h-full object-cover"
+              />
+            </div>
+          )}
+
           <div>
             <h2 className="font-serif text-2xl font-bold text-white mb-3">
               Session Overview & Mandate
@@ -144,6 +158,36 @@ export default function EventDetailPage({ params }: PageProps) {
               {event.description}
             </p>
           </div>
+
+          {event.schedule && event.schedule.length > 0 && (
+            <div>
+              <h2 className="font-serif text-2xl font-bold text-white mb-4">
+                Event Schedule & Flow
+              </h2>
+              <div className="space-y-3 font-mono text-xs">
+                {event.schedule.map((slot, sIdx) => (
+                  <div
+                    key={sIdx}
+                    className="p-3.5 rounded bg-void-card border border-void-border flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="px-2 py-0.5 rounded bg-void-subtle border border-cyan-axon/30 text-cyan-axon shrink-0">
+                        {slot.time}
+                      </span>
+                      <span className="text-slate-100 font-sans font-medium">
+                        {slot.topic}
+                      </span>
+                    </div>
+                    {slot.speaker && (
+                      <span className="text-slate-400 text-[11px]">
+                        {slot.speaker}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <h2 className="font-serif text-2xl font-bold text-white mb-4">
@@ -179,13 +223,25 @@ export default function EventDetailPage({ params }: PageProps) {
             </div>
             {event.speaker.username && (
               <Link
-                href={`/u/${event.speaker.username}`}
+                href={`/portfolio/${event.speaker.username}`}
                 className="inline-block mt-3 text-[11px] text-cyan-axon hover:underline"
               >
                 View Instructor Portfolio →
               </Link>
             )}
           </div>
+
+          {event.externalRegistrationUrl && (
+            <a
+              href={event.externalRegistrationUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-3 px-4 rounded-xl bg-cyan-axon/15 border border-cyan-axon/50 text-cyan-axon font-mono text-xs font-semibold flex items-center justify-center gap-2 hover:bg-cyan-axon/25 transition-colors"
+            >
+              <span>Official Registration / Join Link</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          )}
 
           <EventRsvpPanel
             eventSlug={event.slug}

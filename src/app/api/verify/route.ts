@@ -1,10 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readDb, verifyCredentialQuery } from "@/lib/db";
+import {
+  queryCertificates,
+  readDb,
+  verifyCredentialQuery,
+} from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const code = req.nextUrl.searchParams.get("code") || "";
+  const params = req.nextUrl.searchParams;
+  const code = params.get("code") || "";
+
+  // Server-side paginated directory/registry search (?q=&type=&status=&page=&limit=)
+  if (!code.trim() && (params.has("q") || params.has("page") || params.has("limit"))) {
+    const q = params.get("q") || "";
+    const type = params.get("type") || "all";
+    const status = params.get("status") || "all";
+    const page = Number(params.get("page") || "1") || 1;
+    const limit = Number(params.get("limit") || "12") || 12;
+
+    const paged = queryCertificates({ q, type, status, page, limit });
+    return NextResponse.json({
+      found: paged.items.length > 0,
+      matches: paged.items,
+      total: paged.total,
+      page: paged.page,
+      limit: paged.limit,
+      totalPages: paged.totalPages,
+    });
+  }
+
   if (!code.trim()) {
     return NextResponse.json(
       { error: "Verification serial code, Member ID, or name is required." },

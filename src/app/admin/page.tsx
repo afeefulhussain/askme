@@ -9,8 +9,10 @@ import {
   formatRbacLabel,
   getServerSession,
   isSuperAdmin,
+  sanitizePublicMember,
 } from "@/lib/auth";
 import { readDb } from "@/lib/db";
+import { listBackgroundJobs } from "@/lib/jobs";
 import { WINGS } from "@/data/axonData";
 import AdminPanelClient from "@/components/AdminPanelClient";
 
@@ -22,7 +24,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function AdminPage() {
+export default async function AdminPage() {
   const session = getServerSession();
   if (!session) {
     redirect("/login");
@@ -68,7 +70,11 @@ export default function AdminPage() {
     );
   }
 
-  const db = readDb();
+  const [db, initialJobs] = await Promise.all([
+    Promise.resolve(readDb()),
+    Promise.resolve(listBackgroundJobs(20)),
+  ]);
+
   const fullOrgScope =
     isSuperAdmin(session.rbacRole) || session.rbacRole === "ADVISOR";
   const isCoreLead = session.rbacRole === "CORE_LEAD";
@@ -92,9 +98,10 @@ export default function AdminPage() {
       );
   const tasks = db.wingTasks.filter((t) => scopeMatchesWing(t.wingId));
 
-  const membersList = Object.values(db.members).filter(
-    (m) => m.rbacRole !== "PENDING_APPLICANT"
-  );
+  // Strip passwordHash & private governance tokens before serializing into Client Component
+  const membersList = Object.values(db.members)
+    .filter((m) => m.rbacRole !== "PENDING_APPLICANT")
+    .map(sanitizePublicMember);
 
   const visibleWings = fullOrgScope
     ? WINGS
@@ -116,6 +123,7 @@ export default function AdminPage() {
       initialFinance={showFinance ? db.financeRecords : []}
       initialAuditLogs={showFinance ? db.auditLogs : []}
       initialInquiries={fullOrgScope ? db.inquiries : []}
+      initialJobs={initialJobs}
       membersList={membersList}
       allWings={WINGS}
       scopedWings={visibleWings}

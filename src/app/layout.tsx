@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Lora } from "next/font/google";
 import "./globals.css";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
+import SiteShell from "@/components/SiteShell";
+import { getUpcomingPublishedEvents } from "@/lib/db";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -111,6 +111,14 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const upcomingEvents = getUpcomingPublishedEvents().map((e) => ({
+    slug: e.slug,
+    title: e.title,
+    date: e.date,
+    location: e.location,
+    status: e.status,
+  }));
+
   return (
     <html
       lang="en"
@@ -123,9 +131,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen flex flex-col bg-void text-slate-100 font-sans selection:bg-cyan-axon selection:text-void-500 antialiased">
-        <Navbar />
-        <main className="flex-1 w-full">{children}</main>
-        <Footer />
+        <SiteShell upcomingEvents={upcomingEvents}>{children}</SiteShell>
       </body>
     </html>
   );

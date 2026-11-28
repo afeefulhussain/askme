@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { canAccessDashboard, getServerSession } from "@/lib/auth";
+import {
+  canAccessDashboard,
+  getServerSession,
+  sanitizePublicMember,
+  sanitizeSessionMember,
+} from "@/lib/auth";
 import { getMemberByUsername, updateMemberPortfolio } from "@/lib/db";
 import { portfolioUpdateSchema } from "@/lib/validation";
 
@@ -22,7 +27,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Member not found." }, { status: 404 });
   }
 
-  // Strip internal reporting lines when fetched without matching ownership
+  // Strip internal reporting lines and never leak passwordHash
   const isOwnerOrCouncil =
     session &&
     (session.username === member.username ||
@@ -30,20 +35,10 @@ export async function GET(req: NextRequest) {
       session.rbacRole === "ADVISOR");
 
   if (isOwnerOrCouncil) {
-    return NextResponse.json({ member });
+    return NextResponse.json({ member: sanitizeSessionMember(member) });
   }
 
-  const {
-    reportsTo: _reportsTo,
-    supervisedWings: _supervisedWings,
-    portalResponsibilities: _portalResp,
-    ...publicSafe
-  } = member;
-  void _reportsTo;
-  void _supervisedWings;
-  void _portalResp;
-
-  return NextResponse.json({ member: publicSafe });
+  return NextResponse.json({ member: sanitizePublicMember(member) });
 }
 
 export async function PUT(req: NextRequest) {
@@ -77,7 +72,7 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ member: updated });
+    return NextResponse.json({ member: sanitizeSessionMember(updated) });
   } catch {
     return NextResponse.json(
       { error: "Failed to update portfolio." },

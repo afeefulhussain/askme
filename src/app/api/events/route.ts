@@ -10,34 +10,68 @@ import {
   appendAuditLog,
   createEventProposal,
   moderateEventRecord,
+  paginateItems,
+  queryEvents,
   readDb,
 } from "@/lib/db";
+import { sendEventPublishedNotice } from "@/lib/email";
+import { enqueueEmailDispatchJob } from "@/lib/jobs";
 import { eventCreateSchema, eventModerationSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const session = getServerSession();
-  const scope = req.nextUrl.searchParams.get("scope");
-  const db = readDb();
+  const params = req.nextUrl.searchParams;
+  const scope = params.get("scope");
+  const q = params.get("q") || "";
+  const category = params.get("category") || "all";
+  const wing = params.get("wing") || "all";
+  const page = Number(params.get("page") || "1") || 1;
+  const limit = Number(params.get("limit") || "12") || 12;
 
   if (scope === "all" && session && canAccessAdmin(session.rbacRole)) {
-    const events = isSuperAdmin(session.rbacRole) || session.rbacRole === "ADVISOR"
-      ? db.events
-      : session.rbacRole === "CORE_LEAD"
-      ? db.events.filter(
-          (e) =>
-            session.supervisedWings.includes(e.wingId) ||
-            e.submittedBy === session.name
-        )
-      : db.events.filter((e) => e.wingId === session.wingId);
-    return NextResponse.json({ events });
+    const db = readDb();
+    let events =
+      isSuperAdmin(session.rbacRole) || session.rbacRole === "ADVISOR"
+        ? db.events
+        : session.rbacRole === "CORE_LEAD"
+        ? db.events.filter(
+            (e) =>
+              session.supervisedWings.includes(e.wingId) ||
+              e.submittedBy === session.name
+          )
+        : db.events.filter((e) => e.wingId === session.wingId);
+
+    if (q.trim()) {
+      const needle = q.trim().toLowerCase();
+      events = events.filter((e) =>
+        [e.title, e.location, e.speaker.name].join(" ").toLowerCase().includes(needle)
+      );
+    }
+    const paged = paginateItems(events, page, limit);
+    return NextResponse.json({
+      events: paged.items,
+      total: paged.total,
+      page: paged.page,
+      totalPages: paged.totalPages,
+    });
   }
 
+  const paged = queryEvents({
+    q,
+    category,
+    wing,
+    includeUnapproved: false,
+    page,
+    limit,
+  });
+
   return NextResponse.json({
-    events: db.events.filter(
-      (e) => e.status !== "Pending Approval" && e.status !== "Rejected"
-    ),
+    events: paged.items,
+    total: paged.total,
+    page: paged.page,
+    totalPages: paged.totalPages,
   });
 }
 
@@ -94,6 +128,9 @@ export async function POST(req: NextRequest) {
         speakerOrg: d.speakerOrg,
         description: d.description,
         curriculum: d.curriculum,
+        posterImage: d.posterImage,
+        externalRegistrationUrl: d.externalRegistrationUrl,
+        schedule: d.schedule,
       },
       false
     );
@@ -144,6 +181,22 @@ export async function PATCH(req: NextRequest) {
     );
     if (!updated) {
       return NextResponse.json({ error: "Event not found." }, { status: 404 });
+    }
+
+    if (
+      updated.status === "Registrations Open" ||
+      updated.status === "Scheduled"
+    ) {
+      enqueueEmailDispatchJob(
+        `Event announcement -> ${updated.title}`,
+        () =>
+          sendEventPublishedNotice({
+            eventTitle: updated.title,
+            slug: updated.slug,
+            date: updated.date,
+            location: updated.location,
+          })
+      );
     }
 
     return NextResponse.json({ event: updated });

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -132,10 +133,13 @@ export default function Navbar() {
           {/* Logo & Brand Identity */}
           <Link href="/" className="flex items-center gap-3 group">
             <div className="w-9 h-9 rounded bg-void-card border border-void-border flex items-center justify-center p-1 shadow-sm group-hover:border-cyan-axon/60 transition-colors">
-              <img
+              <Image
                 src="/assets/axon-mark.svg"
                 alt="AXON Brand Mark"
+                width={32}
+                height={32}
                 className="w-full h-full object-contain"
+                priority
               />
             </div>
             <div className="flex flex-col">

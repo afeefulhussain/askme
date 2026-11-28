@@ -12,6 +12,8 @@ import {
   Award,
   RefreshCw,
   ShieldAlert,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import type { VerifiedCertificate } from "@/lib/types";
 
@@ -23,9 +25,16 @@ export default function VerificationEngine({
   initialCode = "",
 }: VerificationEngineProps) {
   const [query, setQuery] = useState(initialCode);
-  const [results, setResults] = useState<VerifiedCertificate[] | "not_found" | null>(
-    null
-  );
+  const [debouncedQuery, setDebouncedQuery] = useState(initialCode);
+  const [results, setResults] = useState<
+    VerifiedCertificate[] | "not_found" | null
+  >(null);
+  const [directoryRows, setDirectoryRows] = useState<VerifiedCertificate[]>([]);
+  const [dirPage, setDirPage] = useState(1);
+  const [dirTotalPages, setDirTotalPages] = useState(1);
+  const [dirTotal, setDirTotal] = useState(0);
+  const [dirLoading, setDirLoading] = useState(false);
+
   const [hasSearched, setHasSearched] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -67,17 +76,58 @@ export default function VerificationEngine({
     [query]
   );
 
+  // 300ms debounced search synced to paginated registry table
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedQuery(query);
+      setDirPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setDirLoading(true);
+
+    fetch(
+      `/api/verify?q=${encodeURIComponent(debouncedQuery.trim())}&page=${dirPage}&limit=6`,
+      { cache: "no-store", signal: controller.signal }
+    )
+      .then((res) => res.json())
+      .then(
+        (data: {
+          matches?: VerifiedCertificate[];
+          total?: number;
+          totalPages?: number;
+        }) => {
+          setDirectoryRows(data.matches || []);
+          setDirTotal(data.total || 0);
+          setDirTotalPages(data.totalPages || 1);
+        }
+      )
+      .catch(() => {
+        // Ignore aborts cleanly
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setDirLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [debouncedQuery, dirPage]);
+
   useEffect(() => {
     if (initialCode) {
       setQuery(initialCode);
-      handleSearch(initialCode);
+      void handleSearch(initialCode);
     }
   }, [initialCode, handleSearch]);
 
   return (
-    <div className="w-full">
+    <div className="w-full space-y-8">
       {/* Search Input Box */}
-      <div className="bg-void-card border border-void-border p-6 rounded-lg shadow-xl">
+      <search className="block bg-void-card border border-void-border p-6 rounded-lg shadow-xl">
         <label
           htmlFor="verify-code-input"
           className="block text-xs font-mono uppercase tracking-wider text-slate-300 mb-2"
@@ -88,7 +138,7 @@ export default function VerificationEngine({
           <div className="relative flex-1">
             <input
               id="verify-code-input"
-              type="text"
+              type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
@@ -128,7 +178,7 @@ export default function VerificationEngine({
               type="button"
               onClick={() => {
                 setQuery(sample);
-                handleSearch(sample);
+                void handleSearch(sample);
               }}
               className="px-2 py-0.5 bg-void-subtle border border-void-border/80 hover:border-cyan-axon/60 text-slate-300 rounded text-[11px] transition-colors"
             >
@@ -136,11 +186,11 @@ export default function VerificationEngine({
             </button>
           ))}
         </div>
-      </div>
+      </search>
 
       {/* Verification Result Output */}
       {hasSearched && (
-        <div className="mt-8 space-y-6 transition-all">
+        <div className="space-y-6 transition-all">
           {loading ? (
             <div className="p-8 text-center bg-void-card border border-void-border rounded-lg">
               <RefreshCw className="w-6 h-6 text-cyan-axon animate-spin mx-auto mb-2" />
@@ -314,6 +364,108 @@ export default function VerificationEngine({
           )}
         </div>
       )}
+
+      {/* Server-Side Paginated Registry Directory Table (300ms Debounced) */}
+      <div className="rounded-xl border border-void-border bg-void-card overflow-hidden">
+        <div className="px-6 py-4 border-b border-void-border flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="font-serif text-lg font-bold text-white">
+              Live Credential Ledger
+            </h2>
+            <p className="text-[11px] font-mono text-slate-400">
+              {dirLoading
+                ? "Filtering registry..."
+                : `Showing ${directoryRows.length} of ${dirTotal} indexed credentials`}
+            </p>
+          </div>
+          <span className="font-mono text-[10px] text-cyan-axon uppercase tracking-wider">
+            Page {dirPage} / {dirTotalPages}
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse font-mono text-xs">
+            <thead>
+              <tr className="border-b border-void-border text-slate-400 text-[10px] uppercase bg-void-400/50">
+                <th className="py-3 px-4">Serial ID</th>
+                <th className="py-3 px-4">Recipient</th>
+                <th className="py-3 px-4">Citation / Role</th>
+                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4 text-right">Inspect</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-void-border/50">
+              {directoryRows.map((row) => (
+                <tr key={row.certCode} className="hover:bg-void-subtle/40">
+                  <td className="py-3 px-4 text-cyan-axon font-bold whitespace-nowrap">
+                    {row.certCode}
+                  </td>
+                  <td className="py-3 px-4 text-white font-sans font-medium">
+                    {row.recipientName}
+                  </td>
+                  <td className="py-3 px-4 text-slate-300 font-sans max-w-xs truncate">
+                    {row.eventOrRole}
+                  </td>
+                  <td className="py-3 px-4">
+                    <span
+                      className={`px-2 py-0.5 rounded border text-[10px] ${
+                        row.status === "Active"
+                          ? "bg-circuit-green/15 border-circuit-green/40 text-circuit-green"
+                          : "bg-red-500/15 border-red-500/40 text-red-400"
+                      }`}
+                    >
+                      {row.status}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuery(row.certCode);
+                        void handleSearch(row.certCode);
+                      }}
+                      className="text-cyan-axon hover:underline text-[11px]"
+                    >
+                      Verify
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {directoryRows.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-slate-400">
+                    No indexed certificates match the current query.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="px-6 py-3 border-t border-void-border bg-void-400/30 flex items-center justify-between font-mono text-xs">
+          <button
+            type="button"
+            disabled={dirPage <= 1}
+            onClick={() => setDirPage((p) => Math.max(1, p - 1))}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded border border-void-border text-slate-300 hover:border-cyan-axon disabled:opacity-40"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            <span>Prev</span>
+          </button>
+          <span className="text-[11px] text-slate-400">
+            Page {dirPage} of {dirTotalPages}
+          </span>
+          <button
+            type="button"
+            disabled={dirPage >= dirTotalPages}
+            onClick={() => setDirPage((p) => Math.min(dirTotalPages, p + 1))}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded border border-void-border text-slate-300 hover:border-cyan-axon disabled:opacity-40"
+          >
+            <span>Next</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

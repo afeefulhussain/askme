@@ -10,6 +10,8 @@ import {
   createProjectRecord,
   getMemberByUsername,
   moderateProjectRecord,
+  paginateItems,
+  queryProjects,
   readDb,
 } from "@/lib/db";
 import { fetchGitHubRepoMetadata } from "@/lib/github";
@@ -19,7 +21,12 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const session = getServerSession();
-  const scope = req.nextUrl.searchParams.get("scope");
+  const params = req.nextUrl.searchParams;
+  const scope = params.get("scope");
+  const q = params.get("q") || "";
+  const wing = params.get("wing") || "all";
+  const page = Number(params.get("page") || "1") || 1;
+  const limit = Number(params.get("limit") || "12") || 12;
   const db = readDb();
 
   if (scope === "mine" && session) {
@@ -31,17 +38,44 @@ export async function GET(req: NextRequest) {
   }
 
   if (scope === "all" && session && canAccessAdmin(session.rbacRole)) {
-    const list =
+    let list =
       isSuperAdmin(session.rbacRole) || session.rbacRole === "ADVISOR"
         ? db.projects
         : session.rbacRole === "CORE_LEAD"
         ? db.projects.filter((p) => session.supervisedWings.includes(p.wingId))
         : db.projects.filter((p) => p.wingId === session.wingId);
-    return NextResponse.json({ projects: list });
+
+    if (q.trim()) {
+      const needle = q.trim().toLowerCase();
+      list = list.filter((p) =>
+        [p.title, p.author.name, p.primaryLanguage || ""]
+          .join(" ")
+          .toLowerCase()
+          .includes(needle)
+      );
+    }
+    const paged = paginateItems(list, page, limit);
+    return NextResponse.json({
+      projects: paged.items,
+      total: paged.total,
+      page: paged.page,
+      totalPages: paged.totalPages,
+    });
   }
 
+  const paged = queryProjects({
+    q,
+    wing,
+    includeUnapproved: false,
+    page,
+    limit,
+  });
+
   return NextResponse.json({
-    projects: db.projects.filter((p) => p.status === "Verified & Active"),
+    projects: paged.items,
+    total: paged.total,
+    page: paged.page,
+    totalPages: paged.totalPages,
   });
 }
 

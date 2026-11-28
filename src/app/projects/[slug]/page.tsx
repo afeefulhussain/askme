@@ -1,6 +1,7 @@
 import React from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -146,7 +147,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
               VERIFIED AXON MEMBER AUTHOR
             </div>
             <div className="flex items-center gap-3 mb-4">
-              <img
+              <Image
                 src={project.author.avatar}
                 alt={project.author.name}
                 width={48}
@@ -169,7 +170,7 @@ export default function ProjectDetailPage({ params }: PageProps) {
             </p>
 
             <Link
-              href={`/u/${project.author.username}`}
+              href={`/portfolio/${project.author.username}`}
               className="w-full py-2.5 bg-void-subtle border border-void-border hover:border-cyan-axon text-center block text-slate-200 rounded transition-colors text-xs"
             >
               View Full Student Portfolio

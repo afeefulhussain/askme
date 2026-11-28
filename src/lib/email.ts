@@ -69,6 +69,7 @@ export async function sendOnboardingWelcomeEmail(params: {
   memberId: string;
   wingName: string;
   username: string;
+  initialPassword?: string;
 }): Promise<EmailSendResult> {
   return dispatchEmail({
     to: params.email,
@@ -77,14 +78,36 @@ export async function sendOnboardingWelcomeEmail(params: {
       <div style="font-family:Inter,Arial,sans-serif;background:#0A0D14;color:#F8FAFC;padding:32px;border:1px solid #1E2738;">
         <div style="font-family:monospace;color:#10B981;font-size:12px;letter-spacing:2px;">INDUCTION APPROVED // ${params.memberId}</div>
         <h2 style="font-family:'Times New Roman',Georgia,serif;color:#FFFFFF;">Welcome to AXON, ${params.name}</h2>
-        <p style="color:#CBD5E1;font-size:14px;">Your induction into the <strong>${params.wingName}</strong> Directorate has been approved by the Executive Council.</p>
+        <p style="color:#CBD5E1;font-size:14px;">Your induction into the <strong>${params.wingName}</strong> Directorate has been approved by the Super Admin.</p>
         <ul style="color:#94A3B8;font-size:13px;line-height:1.8;">
           <li><strong>Member ID:</strong> ${params.memberId}</li>
-          <li><strong>Public Portfolio:</strong> <a href="https://askme.pk/u/${params.username}" style="color:#00F0FF;">https://askme.pk/u/${params.username}</a></li>
+          <li><strong>Login Email:</strong> ${params.email}</li>
+          ${params.initialPassword ? `<li><strong>Issued Initial Password:</strong> <code>${params.initialPassword}</code> (managed exclusively by Super Admin)</li>` : ""}
+          <li><strong>Editorial Portfolio:</strong> <a href="https://askme.pk/portfolio/${params.username}" style="color:#00F0FF;">https://askme.pk/portfolio/${params.username}</a></li>
           <li><strong>Digital ID & Dashboard:</strong> <a href="https://askme.pk/dashboard" style="color:#00F0FF;">https://askme.pk/dashboard</a></li>
           <li><strong>Credential Verification:</strong> <a href="https://askme.pk/verify?code=${params.memberId}" style="color:#00F0FF;">https://askme.pk/verify?code=${params.memberId}</a></li>
         </ul>
         <p style="color:#64748B;font-size:12px;margin-top:20px;">Together We Transmit — AXON Secretariat (axon@askme.pk)</p>
+      </div>
+    `,
+  });
+}
+
+export async function sendEventPublishedNotice(params: {
+  eventTitle: string;
+  slug: string;
+  date: string;
+  location: string;
+}): Promise<EmailSendResult> {
+  return dispatchEmail({
+    to: "axon@askme.pk",
+    subject: `[AXON Event Published] ${params.eventTitle} (${params.date})`,
+    html: `
+      <div style="font-family:Inter,Arial,sans-serif;background:#0A0D14;color:#F8FAFC;padding:24px;border:1px solid #1E2738;">
+        <div style="font-family:monospace;color:#00F0FF;font-size:11px;">EVENT APPROVED & PUBLISHED // ASKME.PK</div>
+        <h3 style="color:#FFFFFF;margin-top:8px;">${params.eventTitle}</h3>
+        <p style="color:#CBD5E1;font-size:13px;">Scheduled for ${params.date} at ${params.location}.</p>
+        <p><a href="https://askme.pk/events/${params.slug}" style="color:#00F0FF;">https://askme.pk/events/${params.slug}</a></p>
       </div>
     `,
   });

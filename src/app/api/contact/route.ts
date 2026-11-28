@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { canAccessAdmin, getServerSession } from "@/lib/auth";
 import { createInquiryRecord, readDb } from "@/lib/db";
 import { sendContactRoutingEmail } from "@/lib/email";
+import { enqueueEmailDispatchJob } from "@/lib/jobs";
 import { contactSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -42,16 +43,20 @@ export async function POST(req: NextRequest) {
       message: d.message,
     });
 
-    const emailResult = await sendContactRoutingEmail({
-      name: d.name,
-      organization: d.organization,
-      email: d.email,
-      subject: d.subject,
-      message: d.message,
-    });
+    const job = enqueueEmailDispatchJob(
+      `Contact routing -> ${d.email} (${d.subject})`,
+      () =>
+        sendContactRoutingEmail({
+          name: d.name,
+          organization: d.organization,
+          email: d.email,
+          subject: d.subject,
+          message: d.message,
+        })
+    );
 
     return NextResponse.json(
-      { inquiry, routedVia: emailResult.provider },
+      { inquiry, routedVia: "queued-async", jobId: job.id },
       { status: 201 }
     );
   } catch {

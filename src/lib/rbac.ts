@@ -1,9 +1,12 @@
-import type { PortalRole } from "@/lib/types";
+import type {
+  AxonMember,
+  PortalRole,
+  PublicAxonMember,
+  SafeSessionMember,
+} from "@/lib/types";
 
 export function canAccessDashboard(role: PortalRole): boolean {
-  return (
-    role !== "PUBLIC_VISITOR" && role !== "PENDING_APPLICANT"
-  );
+  return role !== "PUBLIC_VISITOR" && role !== "PENDING_APPLICANT";
 }
 
 export function canSubmitProjects(role: PortalRole): boolean {
@@ -26,6 +29,14 @@ export function canAccessAdmin(role: PortalRole): boolean {
 }
 
 export function isSuperAdmin(role: PortalRole): boolean {
+  return role === "SUPER_ADMIN";
+}
+
+export function canResetPasswords(role: PortalRole): boolean {
+  return role === "SUPER_ADMIN";
+}
+
+export function canApproveApplications(role: PortalRole): boolean {
   return role === "SUPER_ADMIN";
 }
 
@@ -53,6 +64,27 @@ export function canViewFinanceAndAudit(role: PortalRole): boolean {
     role === "CORE_AUDITOR" ||
     role === "ADVISOR"
   );
+}
+
+export function sanitizePublicMember(member: AxonMember): PublicAxonMember {
+  const {
+    passwordHash: _passwordHash,
+    reportsTo: _reportsTo,
+    supervisedWings: _supervisedWings,
+    portalResponsibilities: _portalResp,
+    ...safe
+  } = member;
+  void _passwordHash;
+  void _reportsTo;
+  void _supervisedWings;
+  void _portalResp;
+  return safe;
+}
+
+export function sanitizeSessionMember(member: AxonMember): SafeSessionMember {
+  const { passwordHash: _passwordHash, ...safe } = member;
+  void _passwordHash;
+  return safe;
 }
 
 export function formatRbacLabel(role: PortalRole): string {
